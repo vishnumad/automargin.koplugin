@@ -5,8 +5,10 @@ line spacing. Your margin settings stay as they are.
 
 ## Install
 
-Copy the `automargin.koplugin` folder into KOReader's `plugins/` folder and
-restart KOReader. Tested on v2026.07.1.
+Download `automargin.koplugin.zip` from the
+[latest release](https://github.com/vishnumad/automargin.koplugin/releases/latest),
+unzip it into KOReader's `plugins/` folder and restart KOReader. Tested on
+v2026.07.1.
 
 ## Usage
 
@@ -44,3 +46,14 @@ To test against a release, extract `koreader-linux-x86_64-<version>.tar.xz`,
 copy KOReader's `spec/unit/commonrequire.lua` (same tag) into its
 `lib/koreader/spec/front/unit/` and the test books `juliet.epub` and
 `leaves.epub` into `data/` there, then use `KOREADER_DIR=<release>/lib/koreader`.
+
+### Publishing a new release
+
+```sh
+make release VERSION=x.y.z
+git push origin master vx.y.z
+```
+
+Pushing the tag runs the checks, builds `automargin.koplugin.zip` and publishes
+the GitHub release. A tag with a suffix, like `v1.0.0-beta.1`, is published as
+a prerelease.
