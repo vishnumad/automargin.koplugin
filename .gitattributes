@@ -1,0 +1,8 @@
+spec/          export-ignore
+.busted        export-ignore
+.gitattributes export-ignore
+.luarc.json    export-ignore
+.stylua.toml   export-ignore
+.styluaignore  export-ignore
+Makefile       export-ignore
+mise.toml      export-ignore
