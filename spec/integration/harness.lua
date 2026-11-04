@@ -239,12 +239,14 @@ function H.observedGaps(reader)
     local Geom = require("ui/geometry")
     local bb = Blitbuffer.new(W, h, Blitbuffer.TYPE_BB8)
     doc:drawCurrentView(bb, 0, 0, Geom:new { x = 0, y = 0, w = W, h = h })
-    local x_off = lineEdges(bb, first)
-    local _, b_off = lineEdges(bb, last)
+    local top, bottom = lineEdges(bb, first), lineEdges(bb, last)
     bb:free()
-    if not (x_off and b_off) then return end
+    if not (top and bottom) then return end
+    -- The edges chosen in the menu.
+    local top_off = G_reader_settings:isTrue("automargin_ascender") and top.a_off or top.x_off
+    local bottom_off = G_reader_settings:isTrue("automargin_descender") and bottom.d_off or bottom.b_off
     local bar = footer.reclaim_height and 0 or footer:getHeight()
-    return { top = first.y + x_off - hdr, bottom = h - bar - (last.y + b_off) }
+    return { top = first.y + top_off - hdr, bottom = h - bar - (last.y + bottom_off) }
 end
 
 --- Goes to the first full page in the middle part of the book, or fails.
@@ -287,11 +289,13 @@ function H.checkCentered(reader, label)
     assert(math.abs(gaps.top - gaps.bottom) <= 1, ("%s: gaps %d / %d"):format(label, gaps.top, gaps.bottom))
     local m, user = plugin.measurement, H.userMargins(reader)
     io.stdout:write(
-        ("    %-20s L=%d x_off=%d b_off=%d, gaps %d/%d -> %d/%d, margins %d/%d -> %d/%d\n"):format(
+        ("    %-20s L=%d rows %d/%d/%d/%d, gaps %d/%d -> %d/%d, margins %d/%d -> %d/%d\n"):format(
             label,
             m.L,
+            m.a_off,
             m.x_off,
             m.b_off,
+            m.d_off,
             l.before.top,
             l.before.bottom,
             gaps.top,

@@ -20,22 +20,36 @@ local function synthetic(L, asc, x, b, desc, opts)
         if k >= b and k < desc then ink = 8 end
         if opts.serifs and (k == x or k == b - 1) then ink = 160 end
         if opts.noise then ink = ink + (k * 7) % 5 end
+        -- Ink past a blank row, above the ascenders and below the descenders.
+        if opts.beyond and (k == asc - 2 or k == desc + 1) then ink = opts.beyond end
         list[k + 1] = ink
     end
     return profile(list)
 end
 
+local function edges(a, x, b, d)
+    return { a_off = a, x_off = x, b_off = b, d_off = d }
+end
+
 describe("Edges.find", function()
-    it("finds the x-band of a sans profile", function()
-        assert.same({ 7, 16 }, { Edges.find(synthetic(20, 3, 7, 16, 19), 20) })
+    it("finds the edges of a sans profile", function()
+        assert.same(edges(3, 7, 16, 19), Edges.find(synthetic(20, 3, 7, 16, 19), 20))
     end)
 
+    local function xBand(m)
+        return { m.x_off, m.b_off }
+    end
+
     it("isn't fooled by serifs at the x-height line and the baseline", function()
-        assert.same({ 7, 16 }, { Edges.find(synthetic(20, 3, 7, 16, 19, { serifs = true }), 20) })
+        assert.same({ 7, 16 }, xBand(Edges.find(synthetic(20, 3, 7, 16, 19, { serifs = true }), 20)))
     end)
 
     it("ignores noise", function()
-        assert.same({ 7, 16 }, { Edges.find(synthetic(20, 3, 7, 16, 19, { noise = true }), 20) })
+        assert.same({ 7, 16 }, xBand(Edges.find(synthetic(20, 3, 7, 16, 19, { noise = true }), 20)))
+    end)
+
+    it("leaves out ink past a gap: accents, brackets, the line above's descenders", function()
+        assert.same(edges(4, 8, 16, 18), Edges.find(synthetic(20, 4, 8, 16, 18, { beyond = 12 }), 20))
     end)
 
     it("reads a real profile: Noto Serif 22 at 600x800", function()
@@ -45,11 +59,28 @@ describe("Edges.find", function()
             917347, 1195064, 957209, 860301, 865506, 945450, 1303985, 1643430, 55410, 51854, 54463, 66096,
             96905, 0, 0,
         })
-        assert.same({ 11, 23 }, { Edges.find(real, 30) })
+        assert.same(edges(6, 11, 23, 28), Edges.find(real, 30))
     end)
 
-    it("finds a baseline on the box's last row", function()
-        assert.same({ 7, 20 }, { Edges.find(synthetic(20, 3, 7, 20, 20), 20) })
+    it("reads a real profile with partly inked rows around the x-band: Noto Serif 28 at 1072x1448", function()
+        -- stylua: ignore
+        local real = profile({
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7202, 346418, 370118, 322531, 262892, 240356, 249397,
+            214287, 210193, 214585, 220531, 232981, 515528, 2106982, 2500206, 2290486, 1671546, 1536018,
+            1459630, 1390566, 1297373, 1273172, 1271226, 1278828, 1653611, 1704520, 1565758, 1269213, 1248680,
+            1226811, 1201303, 1199339, 1220838, 1248154, 1322312, 1438185, 1630568, 2260232, 2609307, 2312803,
+            290138, 65540, 63977, 64301, 65931, 68128, 66138, 64887, 73853, 114684, 128958, 97342, 0, 0, 0,
+        })
+        assert.same(edges(15, 27, 54, 66), Edges.find(real, 69))
+    end)
+
+    it("finds edges on the box's first and last rows", function()
+        assert.same(edges(0, 7, 16, 20), Edges.find(synthetic(20, 0, 7, 16, 20), 20))
+        assert.same(edges(3, 7, 20, 20), Edges.find(synthetic(20, 3, 7, 20, 20), 20))
+    end)
+
+    it("with no ascenders or descenders, ends the ink with the x-band", function()
+        assert.same(edges(7, 7, 16, 16), Edges.find(synthetic(20, 7, 7, 16, 16), 20))
     end)
 
     it("rejects a blank profile", function()
@@ -105,21 +136,28 @@ describe("Edges.bodyLines", function()
 end)
 
 describe("Edges.agree", function()
-    local a = { L = 30, x_off = 11, b_off = 23 }
-    local b = { L = 30, x_off = 12, b_off = 23 }
-    local c = { L = 31, x_off = 11, b_off = 23 }
+    local function m(L, a_off, x_off, b_off, d_off)
+        return { L = L, a_off = a_off, x_off = x_off, b_off = b_off, d_off = d_off }
+    end
+    local a = m(30, 6, 11, 23, 28)
+    local b = m(30, 6, 12, 23, 28)
+    local c = m(31, 6, 11, 23, 28)
 
     it("accepts samples that all match", function()
-        assert.equal(a, Edges.agree({ a, { L = 30, x_off = 11, b_off = 23 }, a }))
+        assert.equal(a, Edges.agree({ a, m(30, 6, 11, 23, 28), a }))
     end)
 
     it("accepts two of three", function()
-        assert.same(a, Edges.agree({ b, a, { L = 30, x_off = 11, b_off = 23 } }))
+        assert.same(a, Edges.agree({ b, a, m(30, 6, 11, 23, 28) }))
         assert.same(a, Edges.agree({ a, false, a }))
     end)
 
     it("rejects samples that all differ", function()
         assert.is_nil(Edges.agree({ a, b, c }))
+    end)
+
+    it("doesn't compare the ascender and descender lines", function()
+        assert.equal(a, Edges.agree({ a, m(30, 5, 11, 23, 27), c }))
     end)
 
     it("rejects a single measured page", function()

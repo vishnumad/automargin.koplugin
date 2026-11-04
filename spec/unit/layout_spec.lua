@@ -2,9 +2,17 @@ local Layout = require("automargin/layout")
 
 -- 1072x1448 at 300 dpi with KOReader's default margins and status bar, as in
 -- spec/integration/hd_test.lua, which renders these gaps.
-local function hd(line, x_off, b_off, overrides)
-    local g =
-        { screen_h = 1448, top = 27, bottom = 55, header = 0, bar = 28, line = line, x_off = x_off, b_off = b_off }
+local function hd(line, top_off, bottom_off, overrides)
+    local g = {
+        screen_h = 1448,
+        top = 27,
+        bottom = 55,
+        header = 0,
+        bar = 28,
+        line = line,
+        top_off = top_off,
+        bottom_off = bottom_off,
+    }
     for k, v in pairs(overrides or {}) do
         g[k] = v
     end
@@ -18,7 +26,7 @@ end
 describe("Layout.compute", function()
     it("predicts the gaps KOReader renders, and centers them", function()
         local cases = {
-            -- size, L, x_off, b_off, gaps before, gaps after
+            -- size, L, x_off, b_off (as top_off, bottom_off), gaps before, gaps after
             { 20, 49, 18, 38, { 45, 81 }, { 63, 63 } },
             { 24, 59, 22, 46, { 49, 49 }, { 49, 49 } },
             { 28, 69, 27, 54, { 54, 97 }, { 76, 75 } },
@@ -67,7 +75,7 @@ describe("Layout.compute", function()
     end)
 
     -- 800 px screen, 20 px status bar, no margins and no space left over.
-    local function tight(x_off, b_off)
+    local function tight(top_off, bottom_off)
         return Layout.compute {
             screen_h = 800,
             top = 0,
@@ -75,8 +83,8 @@ describe("Layout.compute", function()
             header = 0,
             bar = 20,
             line = 30,
-            x_off = x_off,
-            b_off = b_off,
+            top_off = top_off,
+            bottom_off = bottom_off,
         }
     end
 

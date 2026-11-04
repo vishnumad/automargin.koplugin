@@ -45,6 +45,27 @@ test("stays centered through font, size and line spacing changes", function()
     end
 end)
 
+test("centers on the ascender and descender lines when chosen, without re-rendering", function()
+    local function choose(top, bottom)
+        H.resetCounts()
+        H.menuItem(reader, top).callback()
+        H.menuItem(reader, bottom).callback()
+        H.drain()
+        eq(0, H.count.rerenders, top .. "/" .. bottom .. ": re-renders")
+        eq(0, H.count.samples, top .. "/" .. bottom .. ": samplings")
+    end
+    for _, c in ipairs({ { "Ascender", "Baseline" }, { "Midline", "Descender" }, { "Ascender", "Descender" } }) do
+        choose(c[1], c[2])
+        checkCentered(c[1] .. "/" .. c[2])
+    end
+    H.shot("prose-ascender-descender")
+    H.send(reader, "SetFontSize", 28)
+    checkCentered("Ascender/Descender 28")
+    H.send(reader, "SetFontSize", 22)
+    choose("Midline", "Baseline")
+    checkCentered("Midline/Baseline")
+end)
+
 test("top status bar", function()
     H.send(reader, "SetStatusLine", 0)
     assert(reader.document:getHeaderHeight() > 0, "header not shown")

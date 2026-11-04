@@ -2,9 +2,10 @@
 AutoMargin: keeps the text block optically centered on the page.
 
 The page area is trimmed to a whole number of body lines and placed so the gap
-above the first line's x-height equals the gap below the last line's baseline
-(see automargin/layout). Only the margins given to crengine change: the user's
-settings are untouched, so turning the plugin off brings back what they had.
+above the first line's x-height (or ascenders) equals the gap below the last
+line's baseline (or descenders), see automargin/layout. Only the margins given
+to crengine change: the user's settings are untouched, so turning the plugin
+off brings back what they had.
 ]]
 
 local Blitbuffer = require("ffi/blitbuffer")
@@ -25,6 +26,10 @@ local T = require("ffi/util").template
 local ENABLED = "automargin_enabled"
 -- Per book: the last measurement and the rendering hash it was made on.
 local SAVED = "automargin"
+-- Where the text block starts and ends: the ascender line instead of the
+-- midline (x-height), the descender line instead of the baseline.
+local ASCENDER = "automargin_ascender"
+local DESCENDER = "automargin_descender"
 -- Debug: draw where the text block sits.
 local GUIDES = "automargin_guides"
 
@@ -34,7 +39,7 @@ local AutoMargin = WidgetContainer:extend {
     enabled = false, -- for this book
     margins = nil, -- the last margins ReaderTypeset set: {left, top, right, bottom}
     applied = nil, -- the {top, bottom} margins given to crengine
-    measurement = nil, -- {L, x_off, b_off, ms}, see automargin/edges
+    measurement = nil, -- {L, a_off, x_off, b_off, d_off, ms}, see automargin/edges
     measured_hash = nil, -- the rendering the last measurement was made on
     error = nil, -- why the last measurement failed
     layout = nil, -- see automargin/layout, for "Show measurements"
@@ -54,9 +59,11 @@ function AutoMargin:init()
     end
 
     -- With a saved measurement, the book's first render is already fitted.
+    -- Older measurements have no ascender or descender: measure again.
     local saved = doc_settings:readSetting(SAVED)
-    if saved then
-        self.measurement = { L = saved.L, x_off = saved.x_off, b_off = saved.b_off }
+    if saved and saved.d_off then
+        self.measurement =
+            { L = saved.L, a_off = saved.a_off, x_off = saved.x_off, b_off = saved.b_off, d_off = saved.d_off }
         self.measured_hash = saved.hash
     end
 
@@ -114,8 +121,8 @@ function AutoMargin:geometry(m, top, bottom)
         header = self.ui.document:getHeaderHeight(),
         bar = footer.reclaim_height and 0 or footer:getHeight(),
         line = m.L,
-        x_off = m.x_off,
-        b_off = m.b_off,
+        top_off = G_reader_settings:isTrue(ASCENDER) and m.a_off or m.x_off,
+        bottom_off = G_reader_settings:isTrue(DESCENDER) and m.d_off or m.b_off,
     }
 end
 
@@ -140,7 +147,7 @@ function AutoMargin:paintTo(bb, x, y)
     -- The page area: the margins given to crengine.
     line(g.header + g.top, Blitbuffer.COLOR_GRAY)
     line(g.screen_h - g.bottom - 1, Blitbuffer.COLOR_GRAY)
-    -- Just outside the text block: above the first line's x-height, below the last line's baseline.
+    -- Just outside the text block: above the first line, below the last one.
     line(g.header + gaps.top - 1, Blitbuffer.COLOR_BLACK)
     line(g.screen_h - g.bar - gaps.bottom, Blitbuffer.COLOR_BLACK)
     -- The edges the gaps are measured to, where they aren't the screen's.
@@ -180,8 +187,10 @@ function AutoMargin:save()
     self.ui.doc_settings:saveSetting(SAVED, {
         hash = self.measured_hash,
         L = m.L,
+        a_off = m.a_off,
         x_off = m.x_off,
         b_off = m.b_off,
+        d_off = m.d_off,
     })
 end
 
@@ -238,6 +247,32 @@ function AutoMargin:addToMainMenu(menu_items)
                 separator = true,
             },
             {
+                text_func = function()
+                    return G_reader_settings:isTrue(ASCENDER) and _("Top edge: ascender") or _("Top edge: midline")
+                end,
+                help_text = _(
+                    "Where the text starts, for the gap above it: the midline, at the top of letters such as x, or the ascender line, at the top of letters such as h and l."
+                ),
+                sub_item_table = {
+                    self:edgeItem(_("Midline"), ASCENDER, false),
+                    self:edgeItem(_("Ascender"), ASCENDER, true),
+                },
+            },
+            {
+                text_func = function()
+                    return G_reader_settings:isTrue(DESCENDER) and _("Bottom edge: descender")
+                        or _("Bottom edge: baseline")
+                end,
+                help_text = _(
+                    "Where the text ends, for the gap below it: the baseline, at the bottom of letters such as x, or the descender line, at the bottom of letters such as g and p."
+                ),
+                sub_item_table = {
+                    self:edgeItem(_("Baseline"), DESCENDER, false),
+                    self:edgeItem(_("Descender"), DESCENDER, true),
+                },
+                separator = true,
+            },
+            {
                 text = _("Debug"),
                 sub_item_table = {
                     {
@@ -250,7 +285,7 @@ function AutoMargin:addToMainMenu(menu_items)
                     {
                         text = _("Show guide lines"),
                         help_text = _(
-                            "Black lines: just above the first line's x-height and just below the last line's baseline, where a full page of text sits. The gap above the top one should equal the gap below the bottom one.\n\nGray lines: the text area, inside the margins.\n\nDotted lines: the edges the gaps are measured to, when they aren't the screen's: the bottom of the top status bar and the top of the space the bottom status bar takes."
+                            "Black lines: just outside the text block on a full page of text, above the first line's top edge and below the last line's bottom edge. The gap above the top one should equal the gap below the bottom one.\n\nGray lines: the text area, inside the margins.\n\nDotted lines: the edges the gaps are measured to, when they aren't the screen's: the bottom of the top status bar and the top of the space the bottom status bar takes."
                         ),
                         checked_func = function()
                             return G_reader_settings:isTrue(GUIDES)
@@ -263,6 +298,22 @@ function AutoMargin:addToMainMenu(menu_items)
                 },
             },
         },
+    }
+end
+
+-- A choice for an edge of the text block: the ascender or descender line
+-- (value true), or the midline or baseline.
+function AutoMargin:edgeItem(text, setting, value)
+    return {
+        text = text,
+        radio = true,
+        checked_func = function()
+            return G_reader_settings:isTrue(setting) == value
+        end,
+        callback = function()
+            G_reader_settings:saveSetting(setting, value)
+            self:reapply()
+        end,
     }
 end
 
@@ -306,6 +357,7 @@ function AutoMargin:describe()
     end
     local lines = {
         T(_("Line height: %1 px, %2 lines a page"), m.L, l.lines),
+        T(_("Ascender to descender: rows %1–%2"), m.a_off, m.d_off - 1),
         T(_("x-height to baseline: rows %1–%2"), m.x_off, m.b_off - 1),
         T(_("Gap above: %1 → %2 px"), l.before.top, l.after.top),
         T(_("Gap below: %1 → %2 px"), l.before.bottom, l.after.bottom),

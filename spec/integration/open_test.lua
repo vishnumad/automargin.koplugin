@@ -52,7 +52,7 @@ test("the samples agree on every test book", function()
     for _, name in ipairs({ "prose.html", "juliet.epub", "leaves.epub" }) do
         local reader = open(H.freshBook(name, "agree-" .. name))
         local m = assert(reader.automargin.measurement, name .. ": " .. tostring(reader.automargin.error))
-        print(("    %-12s L=%d x_off=%d b_off=%d (%.0f ms)"):format(name, m.L, m.x_off, m.b_off, m.ms))
+        print(("    %-12s L=%d rows %d/%d/%d/%d (%.0f ms)"):format(name, m.L, m.a_off, m.x_off, m.b_off, m.d_off, m.ms))
     end
 end)
 

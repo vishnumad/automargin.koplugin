@@ -47,14 +47,15 @@ local function measurePage(doc, bb)
         if line.y < 0 or line.y + L > h or line.x0 < 0 or line.x1 > w then return nil, "line off screen" end
     end
     doc:drawCurrentView(bb, 0, 0, Geom:new { x = 0, y = 0, w = w, h = h })
-    local x_off, b_off = Edges.find(Measure.inkProfile(bb, lines, L), L)
-    if not x_off then return nil, b_off end
-    return { L = L, x_off = x_off, b_off = b_off }
+    local m, why = Edges.find(Measure.inkProfile(bb, lines, L), L)
+    if not m then return nil, why end
+    m.L = L
+    return m
 end
 
 --- Measures the document's body lines, then goes back to the current page.
 -- Only crengine's position moves: no events are sent.
--- @treturn table|nil {L, x_off, b_off, ms}, or nil
+-- @treturn table|nil {L, a_off, x_off, b_off, d_off, ms}, or nil
 -- @treturn string|nil why there is no measurement
 function Measure.sample(doc, w, h)
     local start = time.now()
@@ -77,9 +78,9 @@ function Measure.sample(doc, w, h)
     end
     local m = Edges.agree(samples)
     if not m then return nil, reason or "samples disagree" end
-    local result = { L = m.L, x_off = m.x_off, b_off = m.b_off, ms = time.to_ms(time.since(start)) }
-    logger.dbg("AutoMargin: measured", result)
-    return result
+    m.ms = time.to_ms(time.since(start))
+    logger.dbg("AutoMargin: measured", m)
+    return m
 end
 
 return Measure
