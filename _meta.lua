@@ -4,5 +4,5 @@ return {
     description = _(
         [[Keeps the text block optically centered between the top and bottom of the page, whatever the font, font size or line spacing.]]
     ),
-    version = "0.1.0",
+    version = "0.1.1",
 }
