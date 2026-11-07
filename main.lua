@@ -167,9 +167,6 @@ end
 function AutoMargin:remeasure()
     local doc = self.ui.document
     if self.remeasuring or not (self:isActive() and self.margins) then return end
-    -- With partial re-rendering, pages away from the current one are stale
-    -- until KOReader reloads the book; the reload measures again.
-    if doc:isRerenderingDelayed() then return end
     if doc:getDocumentRenderingHash(false) == self.measured_hash then return end
 
     -- If the book can't be measured, the user's margins are used as they are.

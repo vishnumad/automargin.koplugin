@@ -38,6 +38,9 @@ end
 
 local function measurePage(doc, bb)
     local w, h = bb:getWidth(), bb:getHeight()
+    -- With partial re-rendering, a page is only laid out again when it is
+    -- drawn: until then, its text boxes are from the old layout.
+    doc:drawCurrentView(bb, 0, 0, Geom:new { x = 0, y = 0, w = w, h = h })
     local text = doc:getTextFromPositions({ x = 0, y = 0 }, { x = w, y = h }, true)
     if not text then return nil, "no text" end
     local lines, L = Edges.bodyLines(text.sboxes)
@@ -46,7 +49,6 @@ local function measurePage(doc, bb)
     for _, line in ipairs(lines) do
         if line.y < 0 or line.y + L > h or line.x0 < 0 or line.x1 > w then return nil, "line off screen" end
     end
-    doc:drawCurrentView(bb, 0, 0, Geom:new { x = 0, y = 0, w = w, h = h })
     local m, why = Edges.find(Measure.inkProfile(bb, lines, L), L)
     if not m then return nil, why end
     m.L = L
@@ -54,12 +56,15 @@ local function measurePage(doc, bb)
 end
 
 --- Measures the document's body lines, then goes back to the current page.
--- Only crengine's position moves: no events are sent.
+-- Only crengine's position moves: no events are sent. During partial
+-- re-rendering, page numbers change as pages are drawn, so the way back is by
+-- xpointer, and KOReader's call cache, keyed by page, is reset.
 -- @treturn table|nil {L, a_off, x_off, b_off, d_off, ms}, or nil
 -- @treturn string|nil why there is no measurement
 function Measure.sample(doc, w, h)
     local start = time.now()
-    local page, count = doc:getCurrentPage(), doc:getPageCount()
+    doc:resetCallCache()
+    local xp, count = doc:getXPointer(), doc:getPageCount()
     local bb = Blitbuffer.new(w, h, Blitbuffer.TYPE_BB8)
     local samples, reason = {}, nil
     -- Whatever happens, free the buffer and go back to the reader's page.
@@ -71,7 +76,8 @@ function Measure.sample(doc, w, h)
         end
     end)
     bb:free()
-    doc:gotoPage(page)
+    doc:gotoXPointer(xp)
+    doc:resetCallCache()
     if not ok then
         logger.warn("AutoMargin: measuring failed:", err)
         return nil, "error"

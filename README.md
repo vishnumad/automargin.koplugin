@@ -22,7 +22,7 @@ to measure from the top of letters like h and l, or the bottom of letters
 like g and p. These apply to all books.
 
 Note:
-- Changing font settings will take noticeably longer with the plugin enabled, as the book is rendered twice. If you need to make layout changes, temporarily turn AutoMargin off, change your desired settings, then turn it back on to re-center.
+- In EPUBs with **Settings › Document › Enable partial renderings** on (the default), font changes are centered right away. Otherwise, changing font settings takes noticeably longer with the plugin enabled, as the book is rendered twice. If you need to make many layout changes, temporarily turn AutoMargin off, change your desired settings, then turn it back on to re-center.
 - Only the total of your top and bottom margins matters. Turn on **Sync T/B
   Margins** to change both at once.
 

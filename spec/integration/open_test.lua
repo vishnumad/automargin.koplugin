@@ -56,20 +56,27 @@ test("the samples agree on every test book", function()
     end
 end)
 
-test("with partial re-rendering, nothing changes until KOReader reloads the book", function()
+test("with partial re-rendering, a font change is centered at once and the reload keeps it", function()
     -- KOReader remembers the partial re-rendering setting per book: use a new one.
     G_reader_settings:makeTrue("cre_partial_rerendering")
     local reader = open(H.freshBook("leaves.epub", "partial.epub"))
-    local plugin = reader.automargin
-    local measurement, margins = plugin.measurement, H.margins(reader)
-    reader:handleEvent(H.Event:new("SetFontSize", reader.document.configurable.font_size + 6))
-    eq(measurement, plugin.measurement, "measurement")
-    eq(margins.top, H.margins(reader).top, "top margin")
-    eq(margins.bottom, H.margins(reader).bottom, "bottom margin")
+    local L = reader.automargin.measurement.L
+    H.resetCounts()
+    H.send(reader, "SetFontSize", reader.document.configurable.font_size + 6)
+    assert(reader.document:getPartialRerenderingsCount() > 0, "not partially re-rendered")
+    eq(0, H.count.rerenders, "full re-renders")
+    assert(reader.automargin.measurement.L ~= L, "measurement not updated")
+    H.checkCentered(reader, "partial")
+
+    -- crengine's rendering hash during partial re-rendering is a placeholder,
+    -- so the reload measures again, but finds the same margins.
+    local margins = H.margins(reader)
+    H.resetCounts()
     local reloaded = H.waitForReload(reader)
-    local m = assert(reloaded.automargin.measurement, reloaded.automargin.error)
-    assert(m.L ~= measurement.L, "measurement not updated")
-    assert(H.isFitted(reloaded), "not fitted after the reload")
+    eq(0, H.count.rerenders, "re-renders after the reload")
+    eq(margins.top, H.margins(reloaded).top, "top margin after the reload")
+    eq(margins.bottom, H.margins(reloaded).bottom, "bottom margin after the reload")
+    H.checkCentered(reloaded, "reloaded")
 end)
 
 H.closeReader()
