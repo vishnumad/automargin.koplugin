@@ -5,7 +5,7 @@ local test, eq = H.test, H.eq
 G_reader_settings:makeTrue("automargin_enabled")
 G_reader_settings:makeFalse("cre_partial_rerendering")
 local reader = H.reader(H.freshBook("prose.html", "guides.html"))
-local doc, footer = reader.document, reader.view.footer
+local doc = reader.document
 
 -- Gray level of the screen at x = 1, inside the left margin, after a repaint.
 local function shade(row)
@@ -21,15 +21,12 @@ end
 -- The rows the lines should be on, from the ink of a full page.
 local function expectedRows()
     local gaps = H.gotoFullPage(reader)
-    local m, hdr = doc:getPageMargins(), doc:getHeaderHeight()
-    local h, bar = H.Screen:getHeight(), footer.reclaim_height and 0 or footer:getHeight()
+    local m, h = doc:getPageMargins(), H.Screen:getHeight()
     return {
-        text_top = hdr + gaps.top - 1,
-        text_bottom = h - bar - gaps.bottom,
-        area_top = hdr + m.top,
+        text_top = gaps.top - 1,
+        text_bottom = h - gaps.bottom,
+        area_top = doc:getHeaderHeight() + m.top,
         area_bottom = h - m.bottom - 1,
-        bar = h - bar,
-        header = hdr - 1,
     }
 end
 
@@ -48,7 +45,7 @@ test("Show measurements and the guides live in the Debug menu", function()
     eq(false, H.menuItem(reader, "Show guide lines").checked_func())
 end)
 
-test("the guides mark the text block, the text area and the status bar", function()
+test("the guides mark the text block and the text area", function()
     toggleGuides()
     local rows = expectedRows()
     H.shot("guides-on")
@@ -56,7 +53,6 @@ test("the guides mark the text block, the text area and the status bar", functio
     assert(isBlack(rows.text_bottom), "no line below the baseline")
     assert(isGray(rows.area_top), "no line at the top of the text area")
     assert(isGray(rows.area_bottom), "no line at the bottom of the text area")
-    assert(isBlack(rows.bar), "no line at the status bar")
     assert(shade(rows.text_top - 3) > 0xF0, "the top gap isn't clear")
 end)
 
@@ -69,12 +65,12 @@ test("with AutoMargin off for the book, they show the uncentered text block", fu
     H.setEnabled(reader, true)
 end)
 
-test("with the top status bar, they mark its bottom too", function()
+test("with the top status bar, they mark the text block", function()
     H.send(reader, "SetStatusLine", 0)
     local rows = expectedRows()
     H.shot("guides-header")
-    assert(isBlack(rows.header), "no line at the top status bar")
     assert(isBlack(rows.text_top), "no line above the x-height")
+    assert(isBlack(rows.text_bottom), "no line below the baseline")
     H.send(reader, "SetStatusLine", 1)
 end)
 

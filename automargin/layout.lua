@@ -1,7 +1,9 @@
 --[[--
 Pure geometry: the page margins to give crengine so that the page area holds a
-whole number of body lines, placed so the gap above the text block equals the
-gap below it. Everything is in screen pixels.
+whole number of body lines, placed so the gap from the top of the screen to the
+text block equals the gap from the text block to the bottom of the screen.
+Status bars don't count, but the page area never moves into their space.
+Everything is in screen pixels.
 
 The user's margins decide how many lines fit on a page. The leftover space,
 less than a line, goes to the margins, so no page can use it: content never
@@ -10,7 +12,8 @@ reaches further down than a full page of body text does.
 Both functions take the same table:
   screen_h: screen height
   top, bottom: page margins (bottom includes the space the status bar reserves)
-  header: height of crengine's top status bar, 0 when hidden
+  header: space above the page area for top status bars: crengine's, and what
+    other plugins add to the top margin for theirs
   bar: space the bottom status bar reserves, 0 with "Overlap status bar"
   line: body line height
   top_off, bottom_off: the rows of a line box where the text block starts and
@@ -33,13 +36,14 @@ local function linesPerPage(g)
 end
 
 local function gapsAt(g, top, lines)
-    local last = top + g.header + (lines - 1) * g.line -- top of the last line box
-    return { top = top + g.top_off, bottom = g.screen_h - g.bar - (last + g.bottom_off) }
+    local first = g.header + top -- top of the first line box
+    local last = first + (lines - 1) * g.line
+    return { top = first + g.top_off, bottom = g.screen_h - (last + g.bottom_off) }
 end
 
 --- The gaps on a full page of body lines with these margins.
--- @treturn table top: from the top edge to the text block;
---   bottom: from the text block to the bottom edge
+-- @treturn table top: from the top of the screen to the text block;
+--   bottom: from the text block to the bottom of the screen
 function Layout.gaps(g)
     return gapsAt(g, g.top, linesPerPage(g))
 end
@@ -50,9 +54,9 @@ end
 function Layout.compute(g)
     local lines = linesPerPage(g)
     local spare = g.top + g.bottom + math.max(0, area(g) - lines * g.line)
-    -- Gap above: top + top_off. Gap below: (spare - top - bar) + (line - bottom_off).
-    local wanted = round((spare - g.bar + g.line - g.bottom_off - g.top_off) / 2)
-    -- Never move the page area off the screen or into the status bar's space.
+    -- Gap above: header + top + top_off. Gap below: (spare - top) + (line - bottom_off).
+    local wanted = round((spare - g.header + g.line - g.bottom_off - g.top_off) / 2)
+    -- Never move the page area into a status bar's space.
     local top = math.max(0, math.min(wanted, spare - g.bar))
     return {
         top = top,

@@ -37,12 +37,14 @@ local AutoMargin = WidgetContainer:extend {
     name = "automargin",
     is_doc_only = true,
     enabled = false, -- for this book
-    margins = nil, -- the last margins ReaderTypeset set: {left, top, right, bottom}
+    margins = nil, -- the last top and bottom margins ReaderTypeset set
     applied = nil, -- the {top, bottom} margins given to crengine
+    reserved = 0, -- space other plugins add to the top margin, e.g. ZenOS for its status bar
     measurement = nil, -- {L, a_off, x_off, b_off, d_off, ms}, see automargin/edges
     measured_hash = nil, -- the rendering the last measurement was made on
     error = nil, -- why the last measurement failed
     layout = nil, -- see automargin/layout, for "Show measurements"
+    remeasuring = false,
 }
 
 function AutoMargin:init()
@@ -67,16 +69,7 @@ function AutoMargin:init()
         self.measured_hash = saved.hash
     end
 
-    -- Every margin change goes through here: the user's, status bar changes,
-    -- and other plugins' wrappers around ReaderTypeset.
-    local doc = self.ui.document
-    local setPageMargins = doc.setPageMargins
-    doc.setPageMargins = function(this, left, top, right, bottom)
-        self.margins = { left, top, right, bottom }
-        local t, b = self:pageMargins(top, bottom)
-        self.applied = { t, b }
-        return setPageMargins(this, left, t, right, b)
-    end
+    self:wrapSetPageMargins()
 
     -- ReaderRolling runs updatePos after every re-render, and once between
     -- ReaderReady and the first paint. Fitting before it checks the rendering
@@ -87,6 +80,28 @@ function AutoMargin:init()
     rolling.updatePos = function(this, ...)
         self:remeasure()
         return updatePos(this, ...)
+    end
+end
+
+-- Every margin change goes through the document's setPageMargins: the user's,
+-- status bar changes, and other plugins' wrappers around ReaderTypeset.
+-- Setting up KOReader's call cache again, as other plugins may, rebuilds the
+-- document's methods from CreDocument, so wrap it again then.
+function AutoMargin:wrapSetPageMargins()
+    local doc = self.ui.document
+    local setPageMargins, setupCallCache = doc.setPageMargins, doc.setupCallCache
+    local function wrapped(this, left, top, right, bottom)
+        self.margins = { top, bottom }
+        setPageMargins(this, left, top, right, bottom)
+        self.reserved = this:getPageMargins().top - top
+        local t, b = self:pageMargins(top, bottom)
+        self.applied = { t, b }
+        return setPageMargins(this, left, t, right, b)
+    end
+    doc.setPageMargins = wrapped
+    doc.setupCallCache = function(this, ...)
+        setupCallCache(this, ...)
+        if this.setPageMargins ~= wrapped then self:wrapSetPageMargins() end
     end
 end
 
@@ -118,7 +133,7 @@ function AutoMargin:geometry(m, top, bottom)
         screen_h = Screen:getHeight(),
         top = top,
         bottom = bottom,
-        header = self.ui.document:getHeaderHeight(),
+        header = self.ui.document:getHeaderHeight() + self.reserved,
         bar = footer.reclaim_height and 0 or footer:getHeight(),
         line = m.L,
         top_off = G_reader_settings:isTrue(ASCENDER) and m.a_off or m.x_off,
@@ -133,33 +148,25 @@ function AutoMargin:paintTo(bb, x, y)
     local m = self.measurement
     if not (G_reader_settings:isTrue(GUIDES) and m and self.ui.view.view_mode == "page") then return end
     local margins = self.ui.document:getPageMargins()
-    local g = self:geometry(m, margins.top, margins.bottom)
+    local g = self:geometry(m, margins.top - self.reserved, margins.bottom)
     local gaps = Layout.gaps(g)
     local w = Screen:getWidth()
     local function line(row, color)
         bb:paintRect(x, y + row, w, 1, color)
     end
-    local function dotted(row)
-        for dx = 0, w - 1, 6 do
-            bb:paintRect(x + dx, y + row, 3, 1, Blitbuffer.COLOR_BLACK)
-        end
-    end
     -- The page area: the margins given to crengine.
     line(g.header + g.top, Blitbuffer.COLOR_GRAY)
     line(g.screen_h - g.bottom - 1, Blitbuffer.COLOR_GRAY)
     -- Just outside the text block: above the first line, below the last one.
-    line(g.header + gaps.top - 1, Blitbuffer.COLOR_BLACK)
-    line(g.screen_h - g.bar - gaps.bottom, Blitbuffer.COLOR_BLACK)
-    -- The edges the gaps are measured to, where they aren't the screen's.
-    if g.header > 0 then dotted(g.header - 1) end
-    if g.bar > 0 then dotted(g.screen_h - g.bar) end
+    line(gaps.top - 1, Blitbuffer.COLOR_BLACK)
+    line(g.screen_h - gaps.bottom, Blitbuffer.COLOR_BLACK)
 end
 
 -- Measures the book if it was re-rendered since the last measurement, and
 -- re-fits the page area if the result changed.
 function AutoMargin:remeasure()
     local doc = self.ui.document
-    if not (self:isActive() and self.margins) then return end
+    if self.remeasuring or not (self:isActive() and self.margins) then return end
     -- With partial re-rendering, pages away from the current one are stale
     -- until KOReader reloads the book; the reload measures again.
     if doc:isRerenderingDelayed() then return end
@@ -168,14 +175,13 @@ function AutoMargin:remeasure()
     -- If the book can't be measured, the user's margins are used as they are.
     local m, err = Measure.sample(doc, Screen:getWidth(), Screen:getHeight())
     self.measurement, self.error = m, err
-    local left, top, right, bottom = unpack(self.margins)
-    local t, b = self:pageMargins(top, bottom)
+    local t, b = self:pageMargins(unpack(self.margins))
     if t ~= self.applied[1] or b ~= self.applied[2] then
-        doc:setPageMargins(left, top, right, bottom)
+        -- ReaderTypeset's UpdatePos runs updatePos, which comes back here.
+        self.remeasuring = true
+        self:reapply()
+        self.remeasuring = false
         doc:getCurrentPos() -- render now, so updatePos sees the new rendering
-        -- Highlight boxes are cached in screen coordinates. A re-render clears
-        -- them, but a change that keeps top + bottom doesn't re-render.
-        self.ui.view:resetHighlightBoxesCache()
     end
     self.measured_hash = doc:getDocumentRenderingHash(false)
     self:save()
@@ -195,11 +201,14 @@ function AutoMargin:save()
 end
 
 -- Hands the user's margins to crengine again, through ReaderTypeset, whose
--- UpdatePos re-renders if needed and measures (see init).
+-- UpdatePos re-renders if needed and measures (see init). Other plugins'
+-- wrappers around ReaderTypeset need it to go through there.
 function AutoMargin:reapply()
     if not self.margins then return end -- not a crengine document, or not set up yet
     self.ui.typeset:onSetPageMargins(self.ui.typeset.unscaled_margins)
-    self.ui.view:resetHighlightBoxesCache() -- see remeasure
+    -- Highlight boxes are cached in screen coordinates. A re-render clears
+    -- them, but a change that keeps top + bottom doesn't re-render.
+    self.ui.view:resetHighlightBoxesCache()
 end
 
 function AutoMargin:onChangeViewMode()
@@ -285,7 +294,7 @@ function AutoMargin:addToMainMenu(menu_items)
                     {
                         text = _("Show guide lines"),
                         help_text = _(
-                            "Black lines: just outside the text block on a full page of text, above the first line's top edge and below the last line's bottom edge. The gap above the top one should equal the gap below the bottom one.\n\nGray lines: the text area, inside the margins.\n\nDotted lines: the edges the gaps are measured to, when they aren't the screen's: the bottom of the top status bar and the top of the space the bottom status bar takes."
+                            "Black lines: just outside the text block on a full page of text, above the first line's top edge and below the last line's bottom edge. The gap from the top of the screen to the top one should equal the gap from the bottom one to the bottom of the screen.\n\nGray lines: the text area, inside the margins."
                         ),
                         checked_func = function()
                             return G_reader_settings:isTrue(GUIDES)

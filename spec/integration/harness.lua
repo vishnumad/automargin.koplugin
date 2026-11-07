@@ -226,7 +226,7 @@ end
 --- The gaps on the rendered current page, from the ink of its first and last
 -- lines. Returns nil unless the page is a full page of same-height lines.
 function H.observedGaps(reader)
-    local doc, footer = reader.document, reader.view.footer
+    local doc = reader.document
     local W, h = H.Screen:getWidth(), H.Screen:getHeight()
     local text = doc:getTextFromPositions({ x = 0, y = 0 }, { x = W, y = h }, true)
     local lines = H.Edges.lines(text and text.sboxes or {})
@@ -245,8 +245,7 @@ function H.observedGaps(reader)
     -- The edges chosen in the menu.
     local top_off = G_reader_settings:isTrue("automargin_ascender") and top.a_off or top.x_off
     local bottom_off = G_reader_settings:isTrue("automargin_descender") and bottom.d_off or bottom.b_off
-    local bar = footer.reclaim_height and 0 or footer:getHeight()
-    return { top = first.y + top_off - hdr, bottom = h - bar - (last.y + bottom_off) }
+    return { top = first.y + top_off, bottom = h - (last.y + bottom_off) }
 end
 
 --- Goes to the first full page in the middle part of the book, or fails.

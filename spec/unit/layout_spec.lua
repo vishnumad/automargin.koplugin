@@ -27,10 +27,10 @@ describe("Layout.compute", function()
     it("predicts the gaps KOReader renders, and centers them", function()
         local cases = {
             -- size, L, x_off, b_off (as top_off, bottom_off), gaps before, gaps after
-            { 20, 49, 18, 38, { 45, 81 }, { 63, 63 } },
-            { 24, 59, 22, 46, { 49, 49 }, { 49, 49 } },
-            { 28, 69, 27, 54, { 54, 97 }, { 76, 75 } },
-            { 32, 79, 31, 62, { 58, 67 }, { 63, 62 } },
+            { 20, 49, 18, 38, { 45, 109 }, { 77, 77 } },
+            { 24, 59, 22, 46, { 49, 77 }, { 63, 63 } },
+            { 28, 69, 27, 54, { 54, 125 }, { 90, 89 } },
+            { 32, 79, 31, 62, { 58, 95 }, { 77, 76 } },
         }
         for _, c in ipairs(cases) do
             local l = hd(c[2], c[3], c[4])
@@ -45,42 +45,38 @@ describe("Layout.compute", function()
         local l, g = hd(69, 27, 54)
         assert.equal(19, l.lines)
         assert.equal(19 * 69, area(l, g))
-        assert.equal(49, l.top)
-        assert.equal(1448 - 19 * 69 - 49, l.bottom)
+        assert.equal(63, l.top)
+        assert.equal(1448 - 19 * 69 - 63, l.bottom)
     end)
 
-    it("with no space left over, only moves the area for the x-height/baseline asymmetry", function()
+    it("with no space left over, moves the area within the margins", function()
         local l, g = hd(49, 18, 38, { top = 24, bottom = 52 })
         assert.equal(28, l.lines)
         assert.equal(28 * 49, area(l, g))
-        assert.equal(21, l.top)
-        assert.equal(55, l.bottom)
+        assert.equal(35, l.top)
+        assert.equal(41, l.bottom)
     end)
 
-    it("measures the top gap from below the top status bar", function()
-        local without = hd(49, 18, 38)
-        local with, g = hd(49, 18, 38, { header = 40 })
-        assert.equal(without.before.top, with.before.top)
-        assert.equal(math.floor((1448 - 27 - 55 - 40) / 49), with.lines)
-        assert.equal(with.lines * 49, area(with, g))
-        assert.is_true(math.abs(with.after.top - with.after.bottom) <= 1)
-    end)
-
-    it("measures the bottom gap to the screen edge with Overlap status bar", function()
-        local l, g = hd(49, 18, 38, { bottom = 27, bar = 0 })
-        assert.equal(28, l.lines)
-        assert.same({ top = 45, bottom = 1448 - (27 + 27 * 49 + 38) }, l.before)
-        assert.equal(28 * 49, area(l, g))
+    it("measures the top gap from the top of the screen, above the top status bar", function()
+        local l, g = hd(49, 18, 38, { header = 40 })
+        assert.equal(40 + 27 + 18, l.before.top)
+        assert.equal(math.floor((1448 - 27 - 55 - 40) / 49), l.lines)
+        assert.equal(l.lines * 49, area(l, g))
         assert.is_true(math.abs(l.after.top - l.after.bottom) <= 1)
     end)
 
-    -- 800 px screen, 20 px status bar, no margins and no space left over.
-    local function tight(top_off, bottom_off)
+    it("centers the same way whether or not the status bar overlaps the text", function()
+        local reserved, overlapping = hd(49, 18, 38), hd(49, 18, 38, { bar = 0 })
+        assert.same({ reserved.top, reserved.bottom }, { overlapping.top, overlapping.bottom })
+    end)
+
+    -- 800 px below the top status bar, 20 px bottom status bar, no margins and no space left over.
+    local function tight(top_off, bottom_off, header)
         return Layout.compute {
-            screen_h = 800,
+            screen_h = 800 + (header or 0),
             top = 0,
             bottom = 20,
-            header = 0,
+            header = header or 0,
             bar = 20,
             line = 30,
             top_off = top_off,
@@ -94,8 +90,8 @@ describe("Layout.compute", function()
         assert.same({ 0, 20 }, { l.top, l.bottom })
     end)
 
-    it("never moves the page area above the screen", function()
-        local l = tight(12, 28)
+    it("never moves the page area into the top status bar's space", function()
+        local l = tight(12, 28, 30)
         assert.is_true(l.clamped)
         assert.same({ 0, 20 }, { l.top, l.bottom })
     end)
