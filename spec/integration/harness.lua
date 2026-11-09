@@ -153,6 +153,29 @@ function H.drain(n)
     end
 end
 
+function H.tap(x, y)
+    local Geom = require("ui/geometry")
+    local ges = { ges = "tap", pos = Geom:new { x = x, y = y, w = 0, h = 0 }, time = require("ui/time").now() }
+    H.UIManager:sendEvent(H.Event:new("Gesture", ges))
+    H.drain()
+end
+
+function H.top()
+    return H.UIManager:getTopmostVisibleWidget() or H.UIManager._window_stack[#H.UIManager._window_stack].widget
+end
+
+function H.tapButton(text, widget)
+    for _, line in ipairs((widget or H.top()).button_table.buttons_layout) do
+        for _, b in ipairs(line) do
+            if b.text == text then
+                local d = b.dimen
+                return H.tap(d.x + math.floor(d.w / 2), d.y + math.floor(d.h / 2))
+            end
+        end
+    end
+    error("no button " .. text)
+end
+
 function H.book(name)
     return HOME .. "/books/" .. name
 end

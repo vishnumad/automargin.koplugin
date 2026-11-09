@@ -303,6 +303,13 @@ function AutoMargin:addToMainMenu(menu_items)
                     },
                 },
             },
+            {
+                text = _("Check for updates"),
+                keep_menu_open = true,
+                callback = function()
+                    require("automargin/updateui").check()
+                end,
+            },
         },
     }
 end

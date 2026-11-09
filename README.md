@@ -10,6 +10,11 @@ Download `automargin.koplugin.zip` from the
 unzip it into KOReader's `plugins/` folder and restart KOReader. Tested on
 v2026.07.1.
 
+## Updating
+
+Open a book and choose **Typesetting › AutoMargin › Check for updates**. If
+you installed v0.1.1 or earlier, update by hand once, as above.
+
 ## Usage
 
 **Typesetting › AutoMargin › Enabled** turns it on for the current book.
