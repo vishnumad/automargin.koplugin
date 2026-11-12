@@ -33,7 +33,7 @@ for _, book in ipairs({ "juliet.epub", "leaves.epub" }) do
         local reader = H.reader(H.freshBook(book, "margins-" .. book))
         H.send(reader, "SetFontSize", 33)
         assert(H.isFitted(reader), "not fitted")
-        local doc, footer, l = reader.document, reader.view.footer, reader.automargin.layout
+        local doc, footer, l = reader.document, reader.view.footer, reader.automargin.fit.layout
         local user = H.userMargins(reader)
         local hdr, bar = doc:getHeaderHeight(), footer.reclaim_height and 0 or footer:getHeight()
         -- The optical correction may move the text block up by a few px.

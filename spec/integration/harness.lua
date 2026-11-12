@@ -23,9 +23,21 @@ local SENTENCES = {
     "Nothing happened for three days, and then everything happened at once, which is how most important things seem to arrive, quietly at first and then with a rush that leaves no time for thinking.",
 }
 
--- Three chapters of novel-style paragraphs: no paragraph spacing, so every
--- page inside a chapter is a full page of body lines.
-local function writeProse(path)
+local CJK_SENTENCES = {
+    "那座房子立在一条长巷的尽头，一半藏在一排老山毛榉树后面，夏天的时候，树枝在头顶交会，像一条绿色的隧道。",
+    "村里没有人记得是谁建造了它，不过每个人都有自己的看法，而且很乐意说给任何站在旁边端着酒杯的人听。",
+    "她走得很快，眼睛盯着坑坑洼洼的地面，一直走到大门口才抬起头，停下来静静地听了很久傍晚的声音。",
+    "那种光线会让普通的东西显得很重要：靠在墙边的手推车，轮胎瘪了的自行车，睡在敞开的门旁边尘土里的狗。",
+    "抽屉里有几十封信，用绳子捆着，按年份排好，最早的那几封字写得又小又工整，她得点上灯才看得清。",
+    "到了早上，雾已经散了，山岭下面的田野在天空下又亮又湿，那片天空对这个安静的小山谷来说似乎太大了。",
+}
+
+--- Writes a book of three chapters of novel-style paragraphs. With no
+-- paragraph spacing, every page inside a chapter is a full page of body lines.
+-- opts.p: CSS for the paragraphs; opts.cjk: Chinese text.
+function H.writeProse(name, opts)
+    opts = opts or {}
+    local sentences = opts.cjk and CJK_SENTENCES or SENTENCES
     local body, n = {}, 0
     for chapter = 1, 3 do
         table.insert(body, ("<h2>Chapter %d</h2>"):format(chapter))
@@ -33,20 +45,44 @@ local function writeProse(path)
             local p = {}
             for i = 1, 3 do
                 n = n + 1
-                p[i] = SENTENCES[(n * 7) % #SENTENCES + 1]
+                p[i] = sentences[(n * 7) % #sentences + 1]
             end
-            table.insert(body, "<p>" .. table.concat(p, " ") .. "</p>")
+            table.insert(body, "<p>" .. table.concat(p, opts.cjk and "" or " ") .. "</p>")
         end
     end
-    local f = assert(io.open(path, "w"))
+    local f = assert(io.open(H.book(name), "w"))
     f:write(
-        '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Prose</title>',
-        "<style>p { margin: 0; text-indent: 1.5em; text-align: justify; } h2 { text-align: center; }</style>",
-        "</head><body>",
+        ('<!DOCTYPE html><html lang="%s"><head><meta charset="utf-8"><title>Prose</title>'):format(
+            opts.cjk and "zh" or "en"
+        ),
+        "<style>p { margin: 0; text-indent: 1.5em; text-align: justify; } h2 { text-align: center; } p { ",
+        opts.p or "",
+        " }</style></head><body>",
         table.concat(body, "\n"),
         "</body></html>"
     )
     f:close()
+    return name
+end
+
+--- Writes a book that can't be measured: verse with too few long lines on a
+-- page. Like most books, it's large enough for crengine to cache (over 64 KB):
+-- an uncached book's rendering hash after a re-render differs from the one it
+-- opens with, so it would be sampled again once more on reopening.
+function H.writeVerse(name)
+    local lines = {}
+    for i = 1, 4000 do
+        table.insert(lines, i % 12 == 0 and "<p>And all the long evening the rain kept on</p>" or "<p>A short line</p>")
+    end
+    local f = assert(io.open(H.book(name), "w"))
+    f:write(
+        '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Verse</title>',
+        "<style>p { margin: 0; text-indent: 0; }</style></head><body>",
+        table.concat(lines, "\n"),
+        "</body></html>"
+    )
+    f:close()
+    return name
 end
 
 local function realpath(path)
@@ -86,7 +122,7 @@ function H.setup(opts)
     for _, f in ipairs({ "juliet.epub", "leaves.epub" }) do
         os.execute(("cp --update=none spec/front/unit/data/%s %q"):format(f, HOME .. "/books/"))
     end
-    writeProse(HOME .. "/books/prose.html")
+    H.writeProse("prose.html")
     -- autosuspend reschedules itself on every input, and zenos's tbr_index
     -- task never returns, so fastforward_ui_events hangs. storefront's startup
     -- catalog update can show a notice on top of a test's dialog.
@@ -302,13 +338,22 @@ function H.isFitted(reader)
 end
 
 --- Checks that a full page matches the plugin's prediction and is centered.
-function H.checkCentered(reader, label)
+-- slack: how far, in px, the gaps seen on the page's first and last lines
+-- may be from the prediction (0 by default).
+function H.checkCentered(reader, label, slack)
+    slack = slack or 0
     local plugin = reader.automargin
     local gaps = H.gotoFullPage(reader)
-    local l = assert(plugin.layout, label .. ": no layout")
-    H.eq(l.after.top, gaps.top, label .. ": predicted top gap")
-    H.eq(l.after.bottom, gaps.bottom, label .. ": predicted bottom gap")
-    assert(math.abs(gaps.top - gaps.bottom) <= 1, ("%s: gaps %d / %d"):format(label, gaps.top, gaps.bottom))
+    local l = assert(plugin.fit.layout, label .. ": no layout")
+    local function near(predicted, seen, what)
+        assert(
+            math.abs(predicted - seen) <= slack,
+            ("%s: predicted %s gap: expected %d, got %d"):format(label, what, predicted, seen)
+        )
+    end
+    near(l.after.top, gaps.top, "top")
+    near(l.after.bottom, gaps.bottom, "bottom")
+    assert(math.abs(gaps.top - gaps.bottom) <= 1 + 2 * slack, ("%s: gaps %d / %d"):format(label, gaps.top, gaps.bottom))
     local m, user = plugin.measurement, H.userMargins(reader)
     io.stdout:write(
         ("    %-20s L=%d rows %d/%d/%d/%d, gaps %d/%d -> %d/%d, margins %d/%d -> %d/%d\n"):format(

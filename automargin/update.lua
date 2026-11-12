@@ -8,6 +8,10 @@ local ROOT = "automargin.koplugin"
 local LATEST_URL = "https://api.github.com/repos/" .. REPO .. "/releases/latest"
 local USER_AGENT = "automargin.koplugin"
 local WORK = ".automargin-update"
+-- In KOReader's directory, the current one. KOReader's HTTPS doesn't verify
+-- servers on its own.
+local CA_BUNDLE = "data/ca-bundle.crt"
+local SUBJECT_ALT_NAME = "2.5.29.17"
 
 function Update.parseVersion(s)
     if type(s) ~= "string" then return nil end
@@ -27,10 +31,8 @@ function Update.isNewer(latest, installed)
     for i = 1, 3 do
         if latest[i] ~= installed[i] then return latest[i] > installed[i] end
     end
-    if latest.pre == installed.pre then return false end
-    if not latest.pre then return true end
-    if not installed.pre then return false end
-    return latest.pre > installed.pre
+    -- The latest release is never a prerelease: it's newer than one of the same version.
+    return installed.pre ~= nil
 end
 
 function Update.pickAsset(release)
@@ -74,8 +76,46 @@ function Update.isDevInstall(dir)
     return lfs.symlinkattributes(dir, "mode") == "link" or lfs.attributes(dir .. "/.git", "mode") ~= nil
 end
 
+--- Whether a certificate's name, which may be a wildcard such as *.github.com, covers host.
+function Update.nameMatches(name, host)
+    name, host = name:lower(), host:lower()
+    if name == host then return true end
+    local suffix = name:match("^%*(%.[^*]+)$")
+    if not suffix or #host <= #suffix or host:sub(-#suffix) ~= suffix then return false end
+    return not host:sub(1, -#suffix - 1):find(".", 1, true)
+end
+
+local function certifiedFor(cert, host)
+    local names = cert:extensions()[SUBJECT_ALT_NAME]
+    for _, name in ipairs(names and names.dNSName or {}) do
+        if Update.nameMatches(name, host) then return true end
+    end
+    return false
+end
+
+-- A LuaSocket create function for HTTPS connections that checks the server's
+-- certificate against KOReader's CA bundle, and that it's for the host. It's
+-- kept on GitHub's redirect to its download host, unlike TLS options.
+local function verifiedCreate()
+    local lfs = require("libs/libkoreader-lfs")
+    if lfs.attributes(CA_BUNDLE, "mode") ~= "file" then return nil, "no CA bundle" end
+    local create = require("ssl.https").tcp { verify = { "peer", "fail_if_no_peer_cert" }, cafile = CA_BUNDLE }
+    return function()
+        local conn = create()
+        local connect = conn.connect
+        function conn:connect(host, port)
+            connect(self, host, port)
+            if certifiedFor(self.sock:getpeercertificate(), host) then return 1 end
+            return nil, "certificate isn't for " .. host
+        end
+        return conn
+    end
+end
+
 local function get(url, headers, block_timeout, total_timeout)
     local socketutil = require("socketutil")
+    local create, err = verifiedCreate()
+    if not create then return nil, err end
     local chunks = {}
     headers = headers or {}
     headers["User-Agent"] = USER_AGENT
@@ -84,6 +124,7 @@ local function get(url, headers, block_timeout, total_timeout)
         url = url,
         headers = headers,
         sink = socketutil.table_sink(chunks),
+        create = create,
     })
     socketutil:reset_timeout()
     if not ok then return nil, tostring(one) end

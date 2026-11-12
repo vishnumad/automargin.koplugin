@@ -36,6 +36,19 @@ test("sampling leaves the reader where it was and sends no events", function()
     print(("    sampled in %.1f ms"):format(m.ms))
 end)
 
+test("sampling starts with the current page and stops once two pages agree", function()
+    local drawn, draw = {}, doc.drawCurrentView
+    doc.drawCurrentView = function(this, ...)
+        table.insert(drawn, this:getCurrentPage())
+        return draw(this, ...)
+    end
+    local page = doc:getCurrentPage()
+    assert(H.Measure.sample(doc, H.Screen:getWidth(), H.Screen:getHeight()))
+    doc.drawCurrentView = draw
+    eq(2, #drawn, "pages drawn")
+    eq(page, drawn[1], "first page drawn")
+end)
+
 -- A highlight over the first three lines of the page.
 local text = doc:getTextFromPositions({ x = 0, y = 0 }, { x = H.Screen:getWidth(), y = 80 }, true)
 reader.annotation:addItem { page = text.pos0, pos0 = text.pos0, pos1 = text.pos1, text = text.text, drawer = "lighten" }

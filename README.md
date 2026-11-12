@@ -35,7 +35,7 @@ Note:
 
 - Only works for reflowable documents (EPUB, FB2, HTML) in page mode.
 - Pages with space between paragraphs can't be centered exactly. It's recommended to enable **Typesetting › Style tweaks › Paragraphs › Spacing between paragraphs › No spacing between paragraphs**.
-- Non-Latin scripts are untested.
+- Scripts other than Latin and Chinese are untested.
 
 ## Development
 
@@ -47,10 +47,11 @@ make fmt
 make integration KOREADER_DIR=<koreader>/koreader-emulator-x86_64-linux-gnu-debug/koreader
 ```
 
-To test against a release, extract `koreader-linux-x86_64-<version>.tar.xz`,
-copy KOReader's `spec/unit/commonrequire.lua` (same tag) into its
-`lib/koreader/spec/front/unit/` and the test books `juliet.epub` and
-`leaves.epub` into `data/` there, then use `KOREADER_DIR=<release>/lib/koreader`.
+To test against a KOReader release (the latest by default):
+
+```sh
+make integration KOREADER_DIR=$(spec/integration/release.sh <dir> [tag])
+```
 
 ### Publishing a new release
 

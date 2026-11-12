@@ -110,7 +110,7 @@ test("scroll mode uses the user's margins, page mode fits again", function()
 end)
 
 test("Show measurements describes the fit", function()
-    local text, l = plugin:describe(), plugin.layout
+    local text, l = plugin:describe(), plugin.fit.layout
     assert(text:find(("Line height: %d px, %d lines a page"):format(plugin.measurement.L, l.lines), 1, true), text)
     assert(text:find(("Gap above: %d → %d px"):format(l.before.top, l.after.top), 1, true), text)
     assert(text:find(("Gap below: %d → %d px"):format(l.before.bottom, l.after.bottom), 1, true), text)

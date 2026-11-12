@@ -24,5 +24,19 @@ test("turning it back on measures and fits in a single render", function()
     H.checkCentered(reader, "turned back on")
 end)
 
+test("turning it on says when the book can't be measured", function()
+    local Notification = require("ui/widget/notification")
+    local notify, said = Notification.notify, nil
+    Notification.notify = function(this, text, ...)
+        said = text
+        return notify(this, text, ...)
+    end
+    G_reader_settings:makeFalse("automargin_enabled")
+    reader = H.reader(H.writeVerse("toggle-verse.html"))
+    H.setEnabled(reader, true)
+    Notification.notify = notify
+    eq("AutoMargin couldn't measure this book", said)
+end)
+
 H.closeReader()
 H.finish()

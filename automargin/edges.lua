@@ -43,12 +43,10 @@ function Edges.lines(segments)
 end
 
 --- Keeps the full-width body lines.
--- @tparam table segments as for Edges.lines
+-- @tparam table lines from Edges.lines
 -- @treturn table|nil lines, or nil
 -- @treturn number|string the line height, or why there are no body lines
-function Edges.bodyLines(segments)
-    local lines = Edges.lines(segments)
-
+function Edges.bodyLines(lines)
     -- Body text has the most common height: this drops headings, drop caps
     -- and lines with inline images.
     local count, L = {}, nil
@@ -68,6 +66,20 @@ function Edges.bodyLines(segments)
     end
     if #body < MIN_LINES then return nil, "too few body lines" end
     return body, L
+end
+
+--- Whether consecutive lines of height L are spaced by more than whole
+-- lines, as with space between paragraphs: then a page's text block can't
+-- fill its page area.
+-- @tparam table lines from Edges.lines
+-- @int L body line height
+-- @treturn boolean
+function Edges.spaced(lines, L)
+    for i = 2, #lines do
+        local a, b = lines[i - 1], lines[i]
+        if a.h == L and b.h == L and (b.y - a.y) % L ~= 0 then return true end
+    end
+    return false
 end
 
 -- The median ink of the rows from..to that have any, or 0.

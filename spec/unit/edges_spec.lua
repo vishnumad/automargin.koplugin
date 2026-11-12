@@ -118,7 +118,7 @@ describe("Edges.bodyLines", function()
             seg(10, 140, 100, 30), -- paragraph end
             seg(40, 170, 550, 30),
         }
-        local lines, L = Edges.bodyLines(segments)
+        local lines, L = Edges.bodyLines(Edges.lines(segments))
         assert.equal(30, L)
         assert.same({
             { y = 50, h = 30, x0 = 10, x1 = 590 },
@@ -130,8 +130,30 @@ describe("Edges.bodyLines", function()
 
     it("needs enough body lines", function()
         local segments = { seg(10, 50, 580, 30), seg(10, 80, 580, 30), seg(10, 110, 580, 30), seg(10, 140, 50, 30) }
-        assert.same({ nil, "too few body lines" }, { Edges.bodyLines(segments) })
+        assert.same({ nil, "too few body lines" }, { Edges.bodyLines(Edges.lines(segments)) })
         assert.same({ nil, "no text" }, { Edges.bodyLines({}) })
+    end)
+end)
+
+describe("Edges.spaced", function()
+    local function lines(...)
+        local list = {}
+        for _, l in ipairs({ ... }) do
+            table.insert(list, { y = l[1], h = l[2], x0 = 10, x1 = 590 })
+        end
+        return list
+    end
+
+    it("is false for lines a whole number of lines apart", function()
+        assert.is_false(Edges.spaced(lines({ 50, 30 }, { 80, 30 }, { 140, 30 }), 30))
+    end)
+
+    it("ignores lines of other heights, such as headings", function()
+        assert.is_false(Edges.spaced(lines({ 10, 45 }, { 65, 30 }, { 95, 30 }), 30))
+    end)
+
+    it("is true for space between paragraphs", function()
+        assert.is_true(Edges.spaced(lines({ 50, 30 }, { 80, 30 }, { 118, 30 }), 30))
     end)
 end)
 

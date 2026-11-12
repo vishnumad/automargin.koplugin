@@ -21,7 +21,7 @@ ReaderTypeset.onSetPageMargins = function(typeset, ...)
 end
 
 local function checkCentered(reader, label)
-    eq(reader.automargin.applied[1] + RESERVE, reader.document:getPageMargins().top, label .. ": reserve kept")
+    eq(reader.automargin.fit.top + RESERVE, reader.document:getPageMargins().top, label .. ": reserve kept")
     H.checkCentered(reader, label)
 end
 

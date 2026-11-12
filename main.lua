@@ -24,8 +24,13 @@ local T = require("ffi/util").template
 -- Per book, as KOReader does: the book's own value once it has been opened,
 -- and in G_reader_settings, the default (★) for newly opened books.
 local ENABLED = "automargin_enabled"
--- Per book: the last measurement and the rendering hash it was made on.
+-- Per book: the last measurement or why it failed, and the rendering it was
+-- made on.
 local SAVED = "automargin"
+-- The last measurement of any book, the guess for a newly opened one.
+local LAST = "automargin_last"
+-- The format of SAVED and LAST: change it when the measurement's fields change.
+local FORMAT = 1
 -- Where the text block starts and ends: the ascender line instead of the
 -- midline (x-height), the descender line instead of the baseline.
 local ASCENDER = "automargin_ascender"
@@ -37,15 +42,18 @@ local AutoMargin = WidgetContainer:extend {
     name = "automargin",
     is_doc_only = true,
     enabled = false, -- for this book
-    margins = nil, -- the last top and bottom margins ReaderTypeset set
-    applied = nil, -- the {top, bottom} margins given to crengine
-    reserved = 0, -- space other plugins add to the top margin, e.g. ZenOS for its status bar
-    measurement = nil, -- {L, a_off, x_off, b_off, d_off, ms}, see automargin/edges
-    measured_hash = nil, -- the rendering the last measurement was made on
+    measurement = nil, -- see automargin/measure
+    measured_hash = nil, -- the rendering the measurement was made on, nil for a guess
     error = nil, -- why the last measurement failed
-    layout = nil, -- see automargin/layout, for "Show measurements"
+    fit = nil, -- the margins last given to crengine, see fitFor
     remeasuring = false,
 }
+
+-- A saved measurement in the current format, or nil.
+local function readSaved(settings, key)
+    local saved = settings:readSetting(key)
+    if type(saved) == "table" and saved.version == FORMAT then return saved end
+end
 
 function AutoMargin:init()
     self:onDispatcherRegisterActions()
@@ -60,14 +68,11 @@ function AutoMargin:init()
         self.enabled = G_reader_settings:isTrue(ENABLED)
     end
 
-    -- With a saved measurement, the book's first render is already fitted.
-    -- Older measurements have no ascender or descender: measure again.
-    local saved = doc_settings:readSetting(SAVED)
-    if saved and saved.d_off then
-        self.measurement =
-            { L = saved.L, a_off = saved.a_off, x_off = saved.x_off, b_off = saved.b_off, d_off = saved.d_off }
-        self.measured_hash = saved.hash
-    end
+    -- With a saved measurement, the book's first render is already fitted. A
+    -- new book is fitted with the last book's measurement, checked after the
+    -- first render: only a wrong guess renders it again.
+    local saved = readSaved(doc_settings, SAVED) or readSaved(G_reader_settings, LAST) or {}
+    self.measurement, self.measured_hash, self.error = saved.m, saved.hash, saved.error
 
     self:wrapSetPageMargins()
 
@@ -85,18 +90,23 @@ end
 
 -- Every margin change goes through the document's setPageMargins: the user's,
 -- status bar changes, and other plugins' wrappers around ReaderTypeset.
+-- Those may add to the top margin, which is only known once it's set: if the
+-- reserve changed, the margins are fitted and set again. crengine doesn't
+-- re-render for the margins that didn't stay.
 -- Setting up KOReader's call cache again, as other plugins may, rebuilds the
 -- document's methods from CreDocument, so wrap it again then.
 function AutoMargin:wrapSetPageMargins()
     local doc = self.ui.document
     local setPageMargins, setupCallCache = doc.setPageMargins, doc.setupCallCache
     local function wrapped(this, left, top, right, bottom)
-        self.margins = { top, bottom }
-        setPageMargins(this, left, top, right, bottom)
-        self.reserved = this:getPageMargins().top - top
-        local t, b = self:pageMargins(top, bottom)
-        self.applied = { t, b }
-        return setPageMargins(this, left, t, right, b)
+        local fit = self:fitFor(top, bottom, self.fit and self.fit.reserved or 0)
+        setPageMargins(this, left, fit.top, right, fit.bottom)
+        local reserved = this:getPageMargins().top - fit.top
+        if reserved ~= fit.reserved then
+            fit = self:fitFor(top, bottom, reserved)
+            setPageMargins(this, left, fit.top, right, fit.bottom)
+        end
+        self.fit = fit
     end
     doc.setPageMargins = wrapped
     doc.setupCallCache = function(this, ...)
@@ -117,23 +127,31 @@ function AutoMargin:isActive()
     return self:isEnabled() and self.ui.view.view_mode == "page"
 end
 
--- The top and bottom margins to give crengine, for the ones the user set.
-function AutoMargin:pageMargins(top, bottom)
-    self.layout = nil
+--- The margins to give crengine for the ones the user set: fitted when active
+-- and measured.
+-- @int reserved space other plugins add to the top margin, e.g. ZenOS for its status bar
+-- @treturn table user: {top, bottom} the user set; reserved; layout: see
+--   automargin/layout, nil if not fitted; top, bottom: the margins to give
+function AutoMargin:fitFor(top, bottom, reserved)
     local m = self.measurement
-    if not (self:isActive() and m) then return top, bottom end
-    self.layout = Layout.compute(self:geometry(m, top, bottom))
-    return self.layout.top, self.layout.bottom
+    local layout = self:isActive() and m and Layout.compute(self:geometry(m, top, bottom, reserved)) or nil
+    return {
+        user = { top = top, bottom = bottom },
+        reserved = reserved,
+        layout = layout,
+        top = layout and layout.top or top,
+        bottom = layout and layout.bottom or bottom,
+    }
 end
 
 -- The page geometry for a measurement and crengine margins, as automargin/layout takes it.
-function AutoMargin:geometry(m, top, bottom)
+function AutoMargin:geometry(m, top, bottom, reserved)
     local footer = self.ui.view.footer
     return {
         screen_h = Screen:getHeight(),
         top = top,
         bottom = bottom,
-        header = self.ui.document:getHeaderHeight() + self.reserved,
+        header = self.ui.document:getHeaderHeight() + reserved,
         bar = footer.reclaim_height and 0 or footer:getHeight(),
         line = m.L,
         top_off = G_reader_settings:isTrue(ASCENDER) and m.a_off or m.x_off,
@@ -145,10 +163,10 @@ end
 -- margins crengine has now, so with AutoMargin off they show the uncentered
 -- text block.
 function AutoMargin:paintTo(bb, x, y)
-    local m = self.measurement
-    if not (G_reader_settings:isTrue(GUIDES) and m and self.ui.view.view_mode == "page") then return end
+    local m, fit = self.measurement, self.fit
+    if not (G_reader_settings:isTrue(GUIDES) and m and fit and self.ui.view.view_mode == "page") then return end
     local margins = self.ui.document:getPageMargins()
-    local g = self:geometry(m, margins.top - self.reserved, margins.bottom)
+    local g = self:geometry(m, margins.top - fit.reserved, margins.bottom, fit.reserved)
     local gaps = Layout.gaps(g)
     local w = Screen:getWidth()
     local function line(row, color)
@@ -166,14 +184,15 @@ end
 -- re-fits the page area if the result changed.
 function AutoMargin:remeasure()
     local doc = self.ui.document
-    if self.remeasuring or not (self:isActive() and self.margins) then return end
+    if self.remeasuring or not (self:isActive() and self.fit) then return end
     if doc:getDocumentRenderingHash(false) == self.measured_hash then return end
 
     -- If the book can't be measured, the user's margins are used as they are.
-    local m, err = Measure.sample(doc, Screen:getWidth(), Screen:getHeight())
-    self.measurement, self.error = m, err
-    local t, b = self:pageMargins(unpack(self.margins))
-    if t ~= self.applied[1] or b ~= self.applied[2] then
+    self.measurement, self.error = Measure.sample(doc, Screen:getWidth(), Screen:getHeight())
+    local fit = self:fitFor(self.fit.user.top, self.fit.user.bottom, self.fit.reserved)
+    if fit.top == self.fit.top and fit.bottom == self.fit.bottom then
+        self.fit = fit -- the same margins, but maybe new gaps for "Show measurements"
+    else
         -- ReaderTypeset's UpdatePos runs updatePos, which comes back here.
         self.remeasuring = true
         self:reapply()
@@ -186,22 +205,15 @@ end
 
 function AutoMargin:save()
     local m = self.measurement
-    if not m then return self.ui.doc_settings:delSetting(SAVED) end
-    self.ui.doc_settings:saveSetting(SAVED, {
-        hash = self.measured_hash,
-        L = m.L,
-        a_off = m.a_off,
-        x_off = m.x_off,
-        b_off = m.b_off,
-        d_off = m.d_off,
-    })
+    self.ui.doc_settings:saveSetting(SAVED, { version = FORMAT, hash = self.measured_hash, m = m, error = self.error })
+    if m then G_reader_settings:saveSetting(LAST, { version = FORMAT, m = m }) end
 end
 
 -- Hands the user's margins to crengine again, through ReaderTypeset, whose
 -- UpdatePos re-renders if needed and measures (see init). Other plugins'
 -- wrappers around ReaderTypeset need it to go through there.
 function AutoMargin:reapply()
-    if not self.margins then return end -- not a crengine document, or not set up yet
+    if not self.fit then return end -- not a crengine document, or not set up yet
     self.ui.typeset:onSetPageMargins(self.ui.typeset.unscaled_margins)
     -- Highlight boxes are cached in screen coordinates. A re-render clears
     -- them, but a change that keeps top + bottom doesn't re-render.
@@ -219,7 +231,12 @@ function AutoMargin:onToggleAutoMargin()
     -- it was off, fitting takes a single render.
     if self.enabled then self:remeasure() end
     self:reapply()
-    Notification:notify(self:isEnabled() and _("AutoMargin on") or _("AutoMargin off"))
+    -- Why is in Debug › Show measurements.
+    Notification:notify(
+        not self.enabled and _("AutoMargin off")
+            or self.error and _("AutoMargin couldn't measure this book")
+            or _("AutoMargin on")
+    )
     return true
 end
 
@@ -363,7 +380,7 @@ end
 function AutoMargin:describe()
     if not self:isEnabled() then return _("AutoMargin is off for this book.") end
     if self.ui.view.view_mode ~= "page" then return _("AutoMargin only works in page mode.") end
-    local m, l = self.measurement, self.layout
+    local m, l = self.measurement, self.fit and self.fit.layout
     if not (m and l) then
         return self.error and T(_("This book couldn't be measured: %1."), self.error)
             or _("This book hasn't been measured yet.")
@@ -374,11 +391,18 @@ function AutoMargin:describe()
         T(_("x-height to baseline: rows %1–%2"), m.x_off, m.b_off - 1),
         T(_("Gap above: %1 → %2 px"), l.before.top, l.after.top),
         T(_("Gap below: %1 → %2 px"), l.before.bottom, l.after.bottom),
+        T(_("Measured in %1 ms"), math.floor(m.ms + 0.5)),
     }
-    -- A measurement saved with the book has no timing.
-    if m.ms then table.insert(lines, T(_("Measured in %1 ms"), math.floor(m.ms + 0.5))) end
     if l.clamped then
         table.insert(lines, _("The status bar limits how far the text can move, so it's only partly centered."))
+    end
+    if m.spaced then
+        table.insert(
+            lines,
+            _(
+                "There is space between paragraphs, so pages can't be centered exactly. To remove it: Style tweaks › Paragraphs › Spacing between paragraphs › No spacing between paragraphs."
+            )
+        )
     end
     return table.concat(lines, "\n")
 end

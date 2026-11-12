@@ -18,3 +18,12 @@ jobs:
       - uses: leafo/gh-actions-luarocks@v6
       - run: luarocks install busted
       - run: make check
+
+  # The plugin hooks KOReader internals: test it in the latest public release.
+  # integration:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v7
+  #     - name: Set up KOReader
+  #       run: echo "KOREADER_DIR=$(spec/integration/release.sh "$RUNNER_TEMP/koreader")" >> "$GITHUB_ENV"
+  #     - run: make integration

@@ -39,6 +39,39 @@ test("a new book opens fitted and centered on its first paint", function()
     print(("    opened in %.0f ms"):format(ms))
 end)
 
+test("a new book opens in one render when the last book's measurement fits it", function()
+    local reader = open(H.freshBook("prose.html", "guess.html"))
+    eq(1, H.count.samples, "samplings")
+    eq(0, H.count.rerenders, "re-renders to fit")
+    local now = H.margins(reader)
+    eq(now.top, first_paint.top, "top margin at first paint")
+    eq(now.bottom, first_paint.bottom, "bottom margin at first paint")
+    H.checkCentered(reader, "guessed")
+end)
+
+test("a book that can't be measured keeps the user's margins and isn't sampled on reopening", function()
+    local name = H.writeVerse("verse.html")
+    local reader = open(name)
+    eq("too few body lines", reader.automargin.error)
+    eq(false, H.isFitted(reader), "fitted")
+    reader = open(name)
+    eq(0, H.count.samples, "samplings")
+    eq(0, H.count.rerenders, "re-renders")
+    eq(false, H.isFitted(reader), "fitted")
+    eq("This book couldn't be measured: too few body lines.", reader.automargin:describe())
+end)
+
+test("Show measurements flags space between paragraphs", function()
+    local function describe(name)
+        local reader = open(name)
+        assert(reader.automargin.measurement, reader.automargin.error)
+        return reader.automargin:describe()
+    end
+    assert(not describe(book):find("space between paragraphs"), "flagged without spacing")
+    local spaced = describe(H.writeProse("spaced.html", { p = "margin: 0.5em 0" }))
+    assert(spaced:find("space between paragraphs"), spaced)
+end)
+
 test("reopening uses the saved measurement: no sampling, no extra render", function()
     local reader, ms = open(book)
     eq(0, H.count.samples, "samplings")
@@ -52,7 +85,18 @@ test("the samples agree on every test book", function()
     for _, name in ipairs({ "prose.html", "juliet.epub", "leaves.epub" }) do
         local reader = open(H.freshBook(name, "agree-" .. name))
         local m = assert(reader.automargin.measurement, name .. ": " .. tostring(reader.automargin.error))
-        print(("    %-12s L=%d rows %d/%d/%d/%d (%.0f ms)"):format(name, m.L, m.a_off, m.x_off, m.b_off, m.d_off, m.ms))
+        print(
+            ("    %-12s L=%d rows %d/%d/%d/%d%s (%.0f ms)"):format(
+                name,
+                m.L,
+                m.a_off,
+                m.x_off,
+                m.b_off,
+                m.d_off,
+                m.spaced and ", spaced" or "",
+                m.ms
+            )
+        )
     end
 end)
 
