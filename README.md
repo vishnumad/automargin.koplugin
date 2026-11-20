@@ -20,10 +20,9 @@ you installed v0.1.1 or earlier, update by hand once, as above.
 **Typesetting › AutoMargin › Enabled** turns it on for the current book.
 Long-press it to set the default for new books.
 
-**Shift** moves the centered text down by the value you set, or up with a
-negative value, in the same units as KOReader's margins. It's set per book,
-like **Enabled**: long-press it to set the default for new books. The default
-is 0, no shift.
+**Shift** moves the centered text down, or up with a negative value, in the
+same units as KOReader's margins. It applies to the current book. Long-press it
+to set the default for new books, 0 unless you change it.
 
 **Top edge** and **Bottom edge** set where the text starts and ends when
 measuring the gaps above and below it. By default, that's the midline (the

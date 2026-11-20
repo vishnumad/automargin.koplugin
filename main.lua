@@ -25,10 +25,9 @@ local T = require("ffi/util").template
 -- Per book, as KOReader does: the book's own value once it has been opened,
 -- and in G_reader_settings, the default (★) for newly opened books.
 local ENABLED = "automargin_enabled"
--- Per book, with a default in the same way: how far to move the centered text
--- down (negative: up), in the units of KOReader's margins.
+-- Per book in the same way: how far to move the centered text down (negative:
+-- up), in the units of KOReader's margins.
 local SHIFT = "automargin_shift"
-local SHIFT_MAX = 100
 -- Per book: the last measurement or why it failed, and the rendering it was
 -- made on.
 local SAVED = "automargin"
@@ -47,7 +46,7 @@ local AutoMargin = WidgetContainer:extend {
     name = "automargin",
     is_doc_only = true,
     enabled = false, -- for this book
-    shift = 0, -- for this book, see SHIFT
+    shift = 0, -- for this book
     measurement = nil, -- see automargin/measure
     measured_hash = nil, -- the rendering the measurement was made on, nil for a guess
     error = nil, -- why the last measurement failed
@@ -55,9 +54,8 @@ local AutoMargin = WidgetContainer:extend {
     remeasuring = false,
 }
 
--- A shift with its sign: -4, 0, +4.
-local function formatShift(shift)
-    return shift > 0 and "+" .. shift or tostring(shift)
+local function defaultShift()
+    return G_reader_settings:readSetting(SHIFT) or 0
 end
 
 -- A saved measurement in the current format, or nil.
@@ -78,7 +76,7 @@ function AutoMargin:init()
     else
         self.enabled = G_reader_settings:isTrue(ENABLED)
     end
-    self.shift = tonumber(doc_settings:readSetting(SHIFT)) or AutoMargin.defaultShift()
+    self.shift = doc_settings:readSetting(SHIFT) or defaultShift()
 
     -- With a saved measurement, the book's first render is already fitted. A
     -- new book is fitted with the last book's measurement, checked after the
@@ -137,23 +135,6 @@ function AutoMargin:onSaveSettings()
     self.ui.doc_settings:saveSetting(SHIFT, self.shift)
 end
 
--- The shift (★) for newly opened books.
-function AutoMargin.defaultShift()
-    return tonumber(G_reader_settings:readSetting(SHIFT)) or 0
-end
-
--- The shift in screen pixels, scaled as KOReader scales margins.
-function AutoMargin:shiftPx()
-    local px = Screen:scaleBySize(math.abs(self.shift))
-    return self.shift < 0 and -px or px
-end
-
-function AutoMargin:setShift(shift)
-    if shift == self.shift then return end
-    self.shift = shift
-    self:reapply()
-end
-
 function AutoMargin:isActive()
     return self:isEnabled() and self.ui.view.view_mode == "page"
 end
@@ -187,7 +168,7 @@ function AutoMargin:geometry(m, top, bottom, reserved)
         line = m.L,
         top_off = G_reader_settings:isTrue(ASCENDER) and m.a_off or m.x_off,
         bottom_off = G_reader_settings:isTrue(DESCENDER) and m.d_off or m.b_off,
-        shift = self:shiftPx(),
+        shift = Screen:scaleBySize(self.shift),
     }
 end
 
@@ -302,11 +283,11 @@ function AutoMargin:addToMainMenu(menu_items)
             },
             {
                 text_func = function()
-                    local text = T(_("Shift: %1"), formatShift(self.shift))
-                    return self.shift == AutoMargin.defaultShift() and text .. "   ★" or text
+                    local text = T(_("Shift: %1"), self.shift > 0 and "+" .. self.shift or self.shift)
+                    return self.shift == defaultShift() and text .. "   ★" or text
                 end,
                 help_text = _(
-                    "Moves the centered text down, or up with a negative value, in the same units as the margins. Long-press to set the default for newly opened books."
+                    "Moves the centered text down, or up with a negative value, in the same units as the margins."
                 ),
                 keep_menu_open = true,
                 callback = function(touchmenu_instance)
@@ -425,29 +406,24 @@ function AutoMargin:showDefaultDialog(touchmenu_instance)
     })
 end
 
--- Tap on "Shift" sets it for this book; long-press sets the default (★) for
--- newly opened books.
+-- Sets the shift for this book, or the default (★) for newly opened books.
 function AutoMargin:showShiftDialog(touchmenu_instance, as_default)
-    local default = AutoMargin.defaultShift()
     UIManager:show(SpinWidget:new {
-        title_text = as_default and _("Default AutoMargin shift (★)") or _("AutoMargin shift"),
-        info_text = as_default and _(
-            "The shift for newly opened books. Positive values move the text down, negative values up."
-        ) or _("Positive values move the text down, negative values up."),
-        value = as_default and default or self.shift,
-        value_min = -SHIFT_MAX,
-        value_max = SHIFT_MAX,
-        value_step = 1,
+        title_text = as_default and _("Default shift for new books (★)") or _("Shift"),
+        info_text = _("Positive values move the text down, negative values up."),
+        value = as_default and defaultShift() or self.shift,
+        value_min = -100,
+        value_max = 100,
         value_hold_step = 10,
-        default_value = as_default and 0 or default,
-        ok_text = as_default and _("Set default") or _("Set shift"),
+        default_value = as_default and 0 or defaultShift(),
         callback = function(spin)
             if as_default then
                 G_reader_settings:saveSetting(SHIFT, spin.value)
             else
-                self:setShift(spin.value)
+                self.shift = spin.value
+                self:reapply()
             end
-            if touchmenu_instance then touchmenu_instance:updateItems() end
+            touchmenu_instance:updateItems()
         end,
     })
 end
@@ -468,15 +444,8 @@ function AutoMargin:describe()
         T(_("Gap below: %1 → %2 px"), l.before.bottom, l.after.bottom),
         T(_("Measured in %1 ms"), math.floor(m.ms + 0.5)),
     }
-    if self.shift ~= 0 then
-        table.insert(lines, 6, T(_("Shift: %1 (%2 px)"), formatShift(self.shift), self:shiftPx()))
-    end
     if l.clamped then
-        table.insert(
-            lines,
-            self.shift ~= 0 and _("The status bar limits how far the text can move, so it's only partly shifted.")
-                or _("The status bar limits how far the text can move, so it's only partly centered.")
-        )
+        table.insert(lines, _("The status bar limits how far the text can move, so it's only partly centered."))
     end
     if m.spaced then
         table.insert(
