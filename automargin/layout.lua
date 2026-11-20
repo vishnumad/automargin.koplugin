@@ -19,6 +19,7 @@ Both functions take the same table:
   top_off, bottom_off: the rows of a line box where the text block starts and
     where it has ended: the x-height or ascender line, and the first row below
     the baseline or the descenders (see automargin/edges)
+  shift: optional, how far to move the centered text block down (negative: up)
 ]]
 
 local Layout = {}
@@ -55,7 +56,7 @@ function Layout.compute(g)
     local lines = linesPerPage(g)
     local spare = g.top + g.bottom + math.max(0, area(g) - lines * g.line)
     -- Gap above: header + top + top_off. Gap below: (spare - top) + (line - bottom_off).
-    local wanted = round((spare - g.header + g.line - g.bottom_off - g.top_off) / 2)
+    local wanted = round((spare - g.header + g.line - g.bottom_off - g.top_off) / 2) + (g.shift or 0)
     -- Never move the page area into a status bar's space.
     local top = math.max(0, math.min(wanted, spare - g.bar))
     return {
