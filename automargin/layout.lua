@@ -1,9 +1,9 @@
 --[[--
 Pure geometry: the page margins to give crengine so that the page area holds a
 whole number of body lines, placed so the gap from the top of the screen to the
-text block equals the gap from the text block to the bottom of the screen.
-Status bars don't count, but the page area never moves into their space.
-Everything is in screen pixels.
+text block equals the gap from the text block to the bottom of the screen, or
+is a pixel smaller when their total is odd. Status bars don't count, but the
+page area never moves into their space. Everything is in screen pixels.
 
 The user's margins decide how many lines fit on a page. The leftover space,
 less than a line, goes to the margins, so no page can use it: content never
@@ -23,10 +23,6 @@ Both functions take the same table:
 ]]
 
 local Layout = {}
-
-local function round(x)
-    return math.floor(x + 0.5)
-end
 
 local function area(g)
     return g.screen_h - g.top - g.bottom - g.header
@@ -56,7 +52,8 @@ function Layout.compute(g)
     local lines = linesPerPage(g)
     local spare = g.top + g.bottom + math.max(0, area(g) - lines * g.line)
     -- Gap above: header + top + top_off. Gap below: (spare - top) + (line - bottom_off).
-    local wanted = round((spare - g.header + g.line - g.bottom_off - g.top_off) / 2) + (g.shift or 0)
+    -- Rounding down puts an odd pixel below the text, where it looks balanced.
+    local wanted = math.floor((spare - g.header + g.line - g.bottom_off - g.top_off) / 2) + (g.shift or 0)
     -- Never move the page area into a status bar's space.
     local top = math.max(0, math.min(wanted, spare - g.bar))
     return {

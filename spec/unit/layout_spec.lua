@@ -29,8 +29,8 @@ describe("Layout.compute", function()
             -- size, L, x_off, b_off (as top_off, bottom_off), gaps before, gaps after
             { 20, 49, 18, 38, { 45, 109 }, { 77, 77 } },
             { 24, 59, 22, 46, { 49, 77 }, { 63, 63 } },
-            { 28, 69, 27, 54, { 54, 125 }, { 90, 89 } },
-            { 32, 79, 31, 62, { 58, 95 }, { 77, 76 } },
+            { 28, 69, 27, 54, { 54, 125 }, { 89, 90 } },
+            { 32, 79, 31, 62, { 58, 95 }, { 76, 77 } },
         }
         for _, c in ipairs(cases) do
             local l = hd(c[2], c[3], c[4])
@@ -45,16 +45,16 @@ describe("Layout.compute", function()
         local l, g = hd(69, 27, 54)
         assert.equal(19, l.lines)
         assert.equal(19 * 69, area(l, g))
-        assert.equal(63, l.top)
-        assert.equal(1448 - 19 * 69 - 63, l.bottom)
+        assert.equal(62, l.top)
+        assert.equal(1448 - 19 * 69 - 62, l.bottom)
     end)
 
     it("with no space left over, moves the area within the margins", function()
         local l, g = hd(49, 18, 38, { top = 24, bottom = 52 })
         assert.equal(28, l.lines)
         assert.equal(28 * 49, area(l, g))
-        assert.equal(35, l.top)
-        assert.equal(41, l.bottom)
+        assert.equal(34, l.top)
+        assert.equal(42, l.bottom)
     end)
 
     it("measures the top gap from the top of the screen, above the top status bar", function()
