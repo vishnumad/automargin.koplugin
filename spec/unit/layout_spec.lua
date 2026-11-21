@@ -70,6 +70,21 @@ describe("Layout.compute", function()
         assert.same({ reserved.top, reserved.bottom }, { overlapping.top, overlapping.bottom })
     end)
 
+    it("moves the centered page area by the shift", function()
+        local centered = hd(69, 27, 54)
+        for _, shift in ipairs({ 10, -10 }) do
+            local l = hd(69, 27, 54, { shift = shift })
+            assert.same({ centered.top + shift, centered.bottom - shift }, { l.top, l.bottom }, "shift " .. shift)
+        end
+    end)
+
+    it("never shifts the page area into the status bar's space or above the screen", function()
+        local down, g = hd(69, 27, 54, { shift = 500 })
+        assert.equal(g.bar, down.bottom)
+        local up = hd(69, 27, 54, { shift = -500 })
+        assert.equal(0, up.top)
+    end)
+
     -- 800 px below the top status bar, 20 px bottom status bar, no margins and no space left over.
     local function tight(top_off, bottom_off, header)
         return Layout.compute {

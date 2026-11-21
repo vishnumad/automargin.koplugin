@@ -16,6 +16,7 @@ local Layout = require("automargin/layout")
 local Measure = require("automargin/measure")
 local Notification = require("ui/widget/notification")
 local Screen = require("device").screen
+local SpinWidget = require("ui/widget/spinwidget")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local _ = require("gettext")
@@ -24,6 +25,9 @@ local T = require("ffi/util").template
 -- Per book, as KOReader does: the book's own value once it has been opened,
 -- and in G_reader_settings, the default (★) for newly opened books.
 local ENABLED = "automargin_enabled"
+-- Per book in the same way: how far to move the centered text down (negative:
+-- up), in the units of KOReader's margins.
+local SHIFT = "automargin_shift"
 -- Per book: the last measurement or why it failed, and the rendering it was
 -- made on.
 local SAVED = "automargin"
@@ -42,12 +46,17 @@ local AutoMargin = WidgetContainer:extend {
     name = "automargin",
     is_doc_only = true,
     enabled = false, -- for this book
+    shift = 0, -- for this book
     measurement = nil, -- see automargin/measure
     measured_hash = nil, -- the rendering the measurement was made on, nil for a guess
     error = nil, -- why the last measurement failed
     fit = nil, -- the margins last given to crengine, see fitFor
     remeasuring = false,
 }
+
+local function defaultShift()
+    return G_reader_settings:readSetting(SHIFT) or 0
+end
 
 -- A saved measurement in the current format, or nil.
 local function readSaved(settings, key)
@@ -67,6 +76,7 @@ function AutoMargin:init()
     else
         self.enabled = G_reader_settings:isTrue(ENABLED)
     end
+    self.shift = doc_settings:readSetting(SHIFT) or defaultShift()
 
     -- With a saved measurement, the book's first render is already fitted. A
     -- new book is fitted with the last book's measurement, checked after the
@@ -120,7 +130,9 @@ function AutoMargin:isEnabled()
 end
 
 function AutoMargin:onSaveSettings()
-    if self.ui.rolling then self.ui.doc_settings:saveSetting(ENABLED, self.enabled) end
+    if not self.ui.rolling then return end
+    self.ui.doc_settings:saveSetting(ENABLED, self.enabled)
+    self.ui.doc_settings:saveSetting(SHIFT, self.shift)
 end
 
 function AutoMargin:isActive()
@@ -156,6 +168,7 @@ function AutoMargin:geometry(m, top, bottom, reserved)
         line = m.L,
         top_off = G_reader_settings:isTrue(ASCENDER) and m.a_off or m.x_off,
         bottom_off = G_reader_settings:isTrue(DESCENDER) and m.d_off or m.b_off,
+        shift = Screen:scaleBySize(self.shift),
     }
 end
 
@@ -267,6 +280,22 @@ function AutoMargin:addToMainMenu(menu_items)
                 hold_callback = function(touchmenu_instance)
                     self:showDefaultDialog(touchmenu_instance)
                 end,
+            },
+            {
+                text_func = function()
+                    local text = T(_("Shift: %1"), self.shift > 0 and "+" .. self.shift or self.shift)
+                    return self.shift == defaultShift() and text .. "   ★" or text
+                end,
+                help_text = _(
+                    "Moves the centered text down, or up with a negative value, in the same units as the margins."
+                ),
+                keep_menu_open = true,
+                callback = function(touchmenu_instance)
+                    self:showShiftDialog(touchmenu_instance)
+                end,
+                hold_callback = function(touchmenu_instance)
+                    self:showShiftDialog(touchmenu_instance, true)
+                end,
                 separator = true,
             },
             {
@@ -373,6 +402,28 @@ function AutoMargin:showDefaultDialog(touchmenu_instance)
         end,
         choice2_callback = function()
             setDefault(true)
+        end,
+    })
+end
+
+-- Sets the shift for this book, or the default (★) for newly opened books.
+function AutoMargin:showShiftDialog(touchmenu_instance, as_default)
+    UIManager:show(SpinWidget:new {
+        title_text = as_default and _("Default shift for new books (★)") or _("Shift"),
+        info_text = _("Positive values move the text down, negative values up."),
+        value = as_default and defaultShift() or self.shift,
+        value_min = -100,
+        value_max = 100,
+        value_hold_step = 10,
+        default_value = as_default and 0 or defaultShift(),
+        callback = function(spin)
+            if as_default then
+                G_reader_settings:saveSetting(SHIFT, spin.value)
+            else
+                self.shift = spin.value
+                self:reapply()
+            end
+            touchmenu_instance:updateItems()
         end,
     })
 end

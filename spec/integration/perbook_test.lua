@@ -1,5 +1,5 @@
--- "Enabled" is a per-book setting; long-press sets the default for newly
--- opened books, as KOReader's own per-book settings do.
+-- "Enabled" and "Shift" are per-book settings; long-press sets the default for
+-- newly opened books, as KOReader's own per-book settings do.
 local H = require("harness").setup()
 local test, eq = H.test, H.eq
 
@@ -40,6 +40,32 @@ test("long-press sets the default for newly opened books", function()
     -- b was opened before, while the default was off.
     reader = H.reader(b)
     eq(false, reader.automargin:isEnabled(), "b, opened before")
+end)
+
+local function setShiftWith(open, value)
+    open { updateItems = function() end }
+    local spin = H.top()
+    spin.callback { value = value }
+    H.UIManager:close(spin)
+    H.drain()
+end
+
+test("the shift moves the page area, per book; long-press sets the default", function()
+    local reader = H.reader(a)
+    local centered = H.margins(reader)
+    local item = H.menuItem(reader, "Shift: 0")
+    setShiftWith(item.callback, 6)
+    local px = H.Screen:scaleBySize(6)
+    eq(centered.top + px, H.margins(reader).top, "top")
+    eq(centered.bottom - px, H.margins(reader).bottom, "bottom")
+
+    setShiftWith(item.hold_callback, -4)
+    eq("Shift: +6", item.text_func())
+    reader = H.reader(a)
+    eq(6, reader.automargin.shift, "a, reopened")
+    reader = H.reader(H.freshBook("prose.html", "book-d.html"))
+    eq(-4, reader.automargin.shift, "new book")
+    eq("Shift: -4   ★", H.menuItem(reader, "Shift: -4").text_func())
 end)
 
 test("the gesture action only changes the current book", function()
