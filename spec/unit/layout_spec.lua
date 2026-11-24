@@ -85,6 +85,34 @@ describe("Layout.compute", function()
         assert.equal(0, up.top)
     end)
 
+    it("aligned to the top, matches the gap above to the side gap", function()
+        local l, g = hd(49, 18, 38, { align = "top", side = 30 })
+        assert.equal(30, l.after.top)
+        assert.equal(l.lines * 49, area(l, g))
+        assert.equal(false, l.clamped)
+    end)
+
+    it("aligned to the bottom, matches the gap below to the side gap", function()
+        local l, g = hd(49, 18, 38, { align = "bottom", side = 30, bar = 0 })
+        assert.equal(30, l.after.bottom)
+        assert.equal(l.lines * 49, area(l, g))
+        assert.equal(false, l.clamped)
+    end)
+
+    it("aligned, still moves the page area by the shift", function()
+        local l = hd(49, 18, 38, { align = "top", side = 30, shift = 10 })
+        assert.equal(40, l.after.top)
+    end)
+
+    it("aligned, never moves the page area above the screen or into the status bar's space", function()
+        local top = hd(49, 18, 38, { align = "top", side = 10 })
+        assert.is_true(top.clamped)
+        assert.equal(0, top.top)
+        local bottom = hd(49, 18, 38, { align = "bottom", side = 10 })
+        assert.is_true(bottom.clamped)
+        assert.equal(28, bottom.bottom)
+    end)
+
     -- 800 px below the top status bar, 20 px bottom status bar, no margins and no space left over.
     local function tight(top_off, bottom_off, header)
         return Layout.compute {

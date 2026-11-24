@@ -7,7 +7,7 @@ local reader = H.reader("prose.html")
 local plugin = reader.automargin
 
 local function checkCentered(label)
-    H.checkCentered(reader, label)
+    H.checkAligned(reader, label)
 end
 
 test("is off by default and leaves the margins alone", function()
@@ -77,18 +77,10 @@ test("top status bar", function()
 end)
 
 test("overlap status bar", function()
-    local footer = reader.view.footer
-    -- What the "Overlap status bar" menu item does.
-    local function setOverlap(on)
-        footer.settings.reclaim_height = on
-        footer.reclaim_height = on
-        footer:refreshFooter(true, true)
-        H.drain()
-    end
-    setOverlap(true)
+    H.setOverlap(reader, true)
     checkCentered("overlap on")
     H.shot("prose-overlap")
-    setOverlap(false)
+    H.setOverlap(reader, false)
     checkCentered("overlap off")
 end)
 

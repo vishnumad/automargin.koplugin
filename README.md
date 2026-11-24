@@ -1,7 +1,8 @@
 # AutoMargin for KOReader
 
-Keeps the text vertically centered on the page, whatever the font, font size or
-line spacing. Your margin settings stay as they are.
+Keeps the text vertically centered on the page, or aligned to its top or
+bottom, whatever the font, font size or line spacing. Your margin settings stay
+as they are.
 
 ## Install
 
@@ -20,9 +21,13 @@ you installed v0.1.1 or earlier, update by hand once, as above.
 **Typesetting › AutoMargin › Enabled** turns it on for the current book.
 Long-press it to set the default for new books.
 
-**Shift** moves the centered text down, or up with a negative value, in the
-same units as KOReader's margins. It applies to the current book. Long-press it
-to set the default for new books, 0 unless you change it.
+**Shift** moves the text down, or up with a negative value, in the same units
+as KOReader's margins. It applies to the current book. Long-press it to set the
+default for new books, 0 unless you change it.
+
+**Alignment** centers the text, or aligns it to the top or bottom of the page
+with the gap there matching the gap at the sides. It applies to the current
+book. Long-press a choice to make it the default for new books.
 
 **Top edge** and **Bottom edge** set where the text starts and ends when
 measuring the gaps above and below it. By default, that's the midline (the

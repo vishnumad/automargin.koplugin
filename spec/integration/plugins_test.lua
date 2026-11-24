@@ -22,7 +22,7 @@ end
 
 local function checkCentered(reader, label)
     eq(reader.automargin.fit.top + RESERVE, reader.document:getPageMargins().top, label .. ": reserve kept")
-    H.checkCentered(reader, label)
+    H.checkAligned(reader, label)
 end
 
 local reader = H.reader(H.freshBook("prose.html", "plugins.html"))

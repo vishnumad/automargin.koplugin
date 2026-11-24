@@ -21,7 +21,7 @@ test("turning it back on measures and fits in a single render", function()
     H.setEnabled(reader, true)
     eq(1, H.count.samples, "samplings")
     eq(1, H.count.rerenders, "re-renders")
-    H.checkCentered(reader, "turned back on")
+    H.checkAligned(reader, "turned back on")
 end)
 
 test("turning it on says when the book can't be measured", function()

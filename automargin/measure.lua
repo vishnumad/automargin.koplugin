@@ -54,7 +54,7 @@ local function measurePage(doc, bb)
     end
     local m, why = Edges.find(Measure.inkProfile(bb, body, L), L)
     if not m then return nil, why end
-    m.L, m.spaced = L, Edges.spaced(lines, L)
+    m.L, m.spaced, m.side = L, Edges.spaced(lines, L), Edges.side(body, w)
     return m
 end
 
@@ -77,7 +77,7 @@ end
 -- Only crengine's position moves: no events are sent. During partial
 -- re-rendering, page numbers change as pages are drawn, so the way back is by
 -- xpointer, and KOReader's call cache, keyed by page, is reset.
--- @treturn table|nil {L, a_off, x_off, b_off, d_off, spaced, ms}, or nil
+-- @treturn table|nil {L, a_off, x_off, b_off, d_off, side, spaced, ms}, or nil
 -- @treturn string|nil why there is no measurement
 function Measure.sample(doc, w, h)
     local start = time.now()

@@ -5,7 +5,7 @@ local test = H.test
 -- Ideographs end at different rows, so the gaps seen on a page's first and
 -- last lines alone can be a row off the measurement, which averages many lines.
 local function checkCentered(reader, label)
-    H.checkCentered(reader, label, 1)
+    H.checkAligned(reader, label, 1)
 end
 
 G_reader_settings:makeFalse("cre_partial_rerendering")

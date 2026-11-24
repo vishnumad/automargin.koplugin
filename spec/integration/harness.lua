@@ -282,8 +282,9 @@ local function lineEdges(bb, line)
     return H.Edges.find(H.Measure.inkProfile(bb, { line }, line.h), line.h)
 end
 
---- The gaps on the rendered current page, from the ink of its first and last
--- lines. Returns nil unless the page is a full page of same-height lines.
+--- The gaps on the rendered current page: above and below, from the ink of its
+-- first and last lines, and at the sides, from the text boxes. Returns nil
+-- unless the page is a full page of same-height lines.
 function H.observedGaps(reader)
     local doc = reader.document
     local W, h = H.Screen:getWidth(), H.Screen:getHeight()
@@ -304,7 +305,7 @@ function H.observedGaps(reader)
     -- The edges chosen in the menu.
     local top_off = G_reader_settings:isTrue("automargin_ascender") and top.a_off or top.x_off
     local bottom_off = G_reader_settings:isTrue("automargin_descender") and bottom.d_off or bottom.b_off
-    return { top = first.y + top_off, bottom = h - (last.y + bottom_off) }
+    return { top = first.y + top_off, bottom = h - (last.y + bottom_off), side = H.Edges.side(lines, W) }
 end
 
 --- Goes to the first full page in the middle part of the book, or fails.
@@ -332,15 +333,25 @@ function H.margins(reader)
     return { top = m.top, bottom = m.bottom }
 end
 
+--- What the "Overlap status bar" menu item does.
+function H.setOverlap(reader, on)
+    local footer = reader.view.footer
+    footer.settings.reclaim_height = on
+    footer.reclaim_height = on
+    footer:refreshFooter(true, true)
+    H.drain()
+end
+
 function H.isFitted(reader)
     local user, now = H.userMargins(reader), H.margins(reader)
     return user.top ~= now.top or user.bottom ~= now.bottom
 end
 
---- Checks that a full page matches the plugin's prediction and is centered.
+--- Checks that a full page matches the plugin's prediction and is centered,
+-- or, aligned to the top or bottom, that the gap there is the side gap.
 -- slack: how far, in px, the gaps seen on the page's first and last lines
 -- may be from the prediction (0 by default).
-function H.checkCentered(reader, label, slack)
+function H.checkAligned(reader, label, slack)
     slack = slack or 0
     local plugin = reader.automargin
     local gaps = H.gotoFullPage(reader)
@@ -353,16 +364,25 @@ function H.checkCentered(reader, label, slack)
     end
     near(l.after.top, gaps.top, "top")
     near(l.after.bottom, gaps.bottom, "bottom")
-    assert(math.abs(gaps.top - gaps.bottom) <= 1 + 2 * slack, ("%s: gaps %d / %d"):format(label, gaps.top, gaps.bottom))
+    local align = plugin.align
+    if align == "center" then
+        assert(
+            math.abs(gaps.top - gaps.bottom) <= 1 + 2 * slack,
+            ("%s: gaps %d / %d"):format(label, gaps.top, gaps.bottom)
+        )
+    else
+        near(gaps.side, gaps[align], align .. " vs side")
+    end
     local m, user = plugin.measurement, H.userMargins(reader)
     io.stdout:write(
-        ("    %-20s L=%d rows %d/%d/%d/%d, gaps %d/%d -> %d/%d, margins %d/%d -> %d/%d\n"):format(
+        ("    %-20s L=%d rows %d/%d/%d/%d, side %d, gaps %d/%d -> %d/%d, margins %d/%d -> %d/%d\n"):format(
             label,
             m.L,
             m.a_off,
             m.x_off,
             m.b_off,
             m.d_off,
+            gaps.side,
             l.before.top,
             l.before.bottom,
             gaps.top,

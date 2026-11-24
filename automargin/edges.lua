@@ -2,10 +2,10 @@
 Pure analysis of rendered pages: pick the body lines, find where the ink's
 edges are inside a line box, and check that the sample pages agree.
 
-A measurement is {L, a_off, x_off, b_off, d_off}: the body line height, then,
-counted from the top of the line box, the first row of the ascenders, the
+A measurement is {L, a_off, x_off, b_off, d_off, side}: the body line height,
+then, counted from the top of the line box, the first row of the ascenders, the
 first row of the x-band, the first row below the baseline and the first row
-below the descenders.
+below the descenders; and the gap from the sides of the page to the text.
 ]]
 
 local Edges = {}
@@ -80,6 +80,27 @@ function Edges.spaced(lines, L)
         if a.h == L and b.h == L and (b.y - a.y) % L ~= 0 then return true end
     end
     return false
+end
+
+-- The most common value of a line field.
+local function mostCommon(lines, field)
+    local count, best = {}, nil
+    for _, line in ipairs(lines) do
+        local v = line[field]
+        count[v] = (count[v] or 0) + 1
+        if not best or count[v] > count[best] then best = v end
+    end
+    return best
+end
+
+--- The gap from the sides of the page to the text: the average of the left
+-- and right gaps. Line boxes end a pixel or two apart, and indented or short
+-- lines further in, so the most common edges count.
+-- @tparam table lines {x0, x1}, from Edges.lines
+-- @int w page width
+-- @treturn int
+function Edges.side(lines, w)
+    return math.floor((mostCommon(lines, "x0") + w - mostCommon(lines, "x1")) / 2)
 end
 
 -- The median ink of the rows from..to that have any, or 0.

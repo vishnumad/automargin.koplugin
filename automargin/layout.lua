@@ -2,8 +2,9 @@
 Pure geometry: the page margins to give crengine so that the page area holds a
 whole number of body lines, placed so the gap from the top of the screen to the
 text block equals the gap from the text block to the bottom of the screen, or
-is a pixel smaller when their total is odd. Status bars don't count, but the
-page area never moves into their space. Everything is in screen pixels.
+is a pixel smaller when their total is odd. Aligned to the top or bottom, the
+gap on that side equals the gap at the sides instead. Status bars don't count,
+but the page area never moves into their space. Everything is in screen pixels.
 
 The user's margins decide how many lines fit on a page. The leftover space,
 less than a line, goes to the margins, so no page can use it: content never
@@ -19,7 +20,10 @@ Both functions take the same table:
   top_off, bottom_off: the rows of a line box where the text block starts and
     where it has ended: the x-height or ascender line, and the first row below
     the baseline or the descenders (see automargin/edges)
-  shift: optional, how far to move the centered text block down (negative: up)
+  align: optional, "top", "center" (the default) or "bottom"
+  side: the gap from the sides of the screen to the text block, for "top" and
+    "bottom"
+  shift: optional, how far to move the text block down (negative: up)
 ]]
 
 local Layout = {}
@@ -52,8 +56,16 @@ function Layout.compute(g)
     local lines = linesPerPage(g)
     local spare = g.top + g.bottom + math.max(0, area(g) - lines * g.line)
     -- Gap above: header + top + top_off. Gap below: (spare - top) + (line - bottom_off).
-    -- Rounding down puts an odd pixel below the text, where it looks balanced.
-    local wanted = math.floor((spare - g.header + g.line - g.bottom_off - g.top_off) / 2) + (g.shift or 0)
+    local wanted
+    if g.align == "top" then
+        wanted = g.side - g.header - g.top_off
+    elseif g.align == "bottom" then
+        wanted = spare + g.line - g.bottom_off - g.side
+    else
+        -- Rounding down puts an odd pixel below the text, where it looks balanced.
+        wanted = math.floor((spare - g.header + g.line - g.bottom_off - g.top_off) / 2)
+    end
+    wanted = wanted + (g.shift or 0)
     -- Never move the page area into a status bar's space.
     local top = math.max(0, math.min(wanted, spare - g.bar))
     return {

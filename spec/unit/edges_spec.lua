@@ -157,6 +157,19 @@ describe("Edges.spaced", function()
     end)
 end)
 
+describe("Edges.side", function()
+    it("averages the most common left and right gaps, ignoring indents, short lines and stray pixels", function()
+        local lines = {
+            { x0 = 30, x1 = 588 },
+            { x0 = 10, x1 = 588 },
+            { x0 = 9, x1 = 589 },
+            { x0 = 10, x1 = 588 },
+            { x0 = 10, x1 = 300 },
+        }
+        assert.equal(11, Edges.side(lines, 600))
+    end)
+end)
+
 describe("Edges.agree", function()
     local function m(L, a_off, x_off, b_off, d_off)
         return { L = L, a_off = a_off, x_off = x_off, b_off = b_off, d_off = d_off }

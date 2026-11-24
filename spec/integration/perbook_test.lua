@@ -68,6 +68,18 @@ test("the shift moves the page area, per book; long-press sets the default", fun
     eq("Shift: -4   ★", H.menuItem(reader, "Shift: -4").text_func())
 end)
 
+test("the alignment is per book; long-press sets the default", function()
+    local reader = H.reader(a)
+    eq("center", reader.automargin.align, "a, default")
+    H.menuItem(reader, "Top").callback()
+    H.menuItem(reader, "Bottom").hold_callback { updateItems = function() end }
+    eq("Bottom   ★", H.menuItem(reader, "Bottom").text_func())
+    reader = H.reader(a)
+    eq("top", reader.automargin.align, "a, reopened")
+    reader = H.reader(H.freshBook("prose.html", "book-e.html"))
+    eq("bottom", reader.automargin.align, "new book")
+end)
+
 test("the gesture action only changes the current book", function()
     local reader = H.reader(c)
     require("dispatcher"):execute({ automargin_toggle = true })

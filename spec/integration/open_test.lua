@@ -35,7 +35,7 @@ test("a new book opens fitted and centered on its first paint", function()
     local now = H.margins(reader)
     eq(now.top, first_paint.top, "top margin at first paint")
     eq(now.bottom, first_paint.bottom, "bottom margin at first paint")
-    H.checkCentered(reader, "first open")
+    H.checkAligned(reader, "first open")
     print(("    opened in %.0f ms"):format(ms))
 end)
 
@@ -46,7 +46,7 @@ test("a new book opens in one render when the last book's measurement fits it", 
     local now = H.margins(reader)
     eq(now.top, first_paint.top, "top margin at first paint")
     eq(now.bottom, first_paint.bottom, "bottom margin at first paint")
-    H.checkCentered(reader, "guessed")
+    H.checkAligned(reader, "guessed")
 end)
 
 test("a book that can't be measured keeps the user's margins and isn't sampled on reopening", function()
@@ -77,7 +77,7 @@ test("reopening uses the saved measurement: no sampling, no extra render", funct
     eq(0, H.count.samples, "samplings")
     eq(0, H.count.rerenders, "re-renders")
     assert(H.isFitted(reader), "not fitted")
-    H.checkCentered(reader, "reopened")
+    H.checkAligned(reader, "reopened")
     print(("    opened in %.0f ms"):format(ms))
 end)
 
@@ -110,7 +110,7 @@ test("with partial re-rendering, a font change is centered at once and the reloa
     assert(reader.document:getPartialRerenderingsCount() > 0, "not partially re-rendered")
     eq(0, H.count.rerenders, "full re-renders")
     assert(reader.automargin.measurement.L ~= L, "measurement not updated")
-    H.checkCentered(reader, "partial")
+    H.checkAligned(reader, "partial")
 
     -- crengine's rendering hash during partial re-rendering is a placeholder,
     -- so the reload measures again, but finds the same margins.
@@ -120,7 +120,7 @@ test("with partial re-rendering, a font change is centered at once and the reloa
     eq(0, H.count.rerenders, "re-renders after the reload")
     eq(margins.top, H.margins(reloaded).top, "top margin after the reload")
     eq(margins.bottom, H.margins(reloaded).bottom, "bottom margin after the reload")
-    H.checkCentered(reloaded, "reloaded")
+    H.checkAligned(reloaded, "reloaded")
 end)
 
 H.closeReader()

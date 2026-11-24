@@ -1,11 +1,13 @@
 --[[--
-AutoMargin: keeps the text block optically centered on the page.
+AutoMargin: keeps the text block optically centered on the page, or aligned to
+its top or bottom.
 
 The page area is trimmed to a whole number of body lines and placed so the gap
 above the first line's x-height (or ascenders) equals the gap below the last
-line's baseline (or descenders), see automargin/layout. Only the margins given
-to crengine change: the user's settings are untouched, so turning the plugin
-off brings back what they had.
+line's baseline (or descenders), see automargin/layout. Aligned to the top or
+bottom, the gap on that side equals the gap at the sides instead. Only the
+margins given to crengine change: the user's settings are untouched, so turning
+the plugin off brings back what they had.
 ]]
 
 local Blitbuffer = require("ffi/blitbuffer")
@@ -25,15 +27,19 @@ local T = require("ffi/util").template
 -- Per book, as KOReader does: the book's own value once it has been opened,
 -- and in G_reader_settings, the default (★) for newly opened books.
 local ENABLED = "automargin_enabled"
--- Per book in the same way: how far to move the centered text down (negative:
--- up), in the units of KOReader's margins.
+-- Per book in the same way: how far to move the text down (negative: up), in
+-- the units of KOReader's margins.
 local SHIFT = "automargin_shift"
+-- Per book in the same way: "top", "center" or "bottom".
+local ALIGN = "automargin_align"
 -- Per book: the last measurement or why it failed, and the rendering it was
 -- made on.
 local SAVED = "automargin"
 -- The last measurement of any book, the guess for a newly opened one.
 local LAST = "automargin_last"
 -- The format of SAVED and LAST: change it when the measurement's fields change.
+-- Measurements saved before alignment was added have no side gap: it is
+-- measured when a book is first aligned to the top or bottom.
 local FORMAT = 1
 -- Where the text block starts and ends: the ascender line instead of the
 -- midline (x-height), the descender line instead of the baseline.
@@ -47,6 +53,7 @@ local AutoMargin = WidgetContainer:extend {
     is_doc_only = true,
     enabled = false, -- for this book
     shift = 0, -- for this book
+    align = "center", -- for this book
     measurement = nil, -- see automargin/measure
     measured_hash = nil, -- the rendering the measurement was made on, nil for a guess
     error = nil, -- why the last measurement failed
@@ -54,8 +61,14 @@ local AutoMargin = WidgetContainer:extend {
     remeasuring = false,
 }
 
+local ALIGNMENTS = { top = _("Top"), center = _("Center"), bottom = _("Bottom") }
+
 local function defaultShift()
     return G_reader_settings:readSetting(SHIFT) or 0
+end
+
+local function defaultAlign()
+    return G_reader_settings:readSetting(ALIGN) or "center"
 end
 
 -- A saved measurement in the current format, or nil.
@@ -77,6 +90,7 @@ function AutoMargin:init()
         self.enabled = G_reader_settings:isTrue(ENABLED)
     end
     self.shift = doc_settings:readSetting(SHIFT) or defaultShift()
+    self.align = doc_settings:readSetting(ALIGN) or defaultAlign()
 
     -- With a saved measurement, the book's first render is already fitted. A
     -- new book is fitted with the last book's measurement, checked after the
@@ -133,6 +147,7 @@ function AutoMargin:onSaveSettings()
     if not self.ui.rolling then return end
     self.ui.doc_settings:saveSetting(ENABLED, self.enabled)
     self.ui.doc_settings:saveSetting(SHIFT, self.shift)
+    self.ui.doc_settings:saveSetting(ALIGN, self.align)
 end
 
 function AutoMargin:isActive()
@@ -168,6 +183,8 @@ function AutoMargin:geometry(m, top, bottom, reserved)
         line = m.L,
         top_off = G_reader_settings:isTrue(ASCENDER) and m.a_off or m.x_off,
         bottom_off = G_reader_settings:isTrue(DESCENDER) and m.d_off or m.b_off,
+        align = m.side and self.align or "center", -- until the side gap is measured
+        side = m.side,
         shift = Screen:scaleBySize(self.shift),
     }
 end
@@ -193,12 +210,14 @@ function AutoMargin:paintTo(bb, x, y)
     line(g.screen_h - gaps.bottom, Blitbuffer.COLOR_BLACK)
 end
 
--- Measures the book if it was re-rendered since the last measurement, and
--- re-fits the page area if the result changed.
+-- Measures the book if it was re-rendered since the last measurement, or if
+-- the alignment needs the side gap and the measurement has none, and re-fits
+-- the page area if the result changed.
 function AutoMargin:remeasure()
-    local doc = self.ui.document
+    local doc, m = self.ui.document, self.measurement
     if self.remeasuring or not (self:isActive() and self.fit) then return end
-    if doc:getDocumentRenderingHash(false) == self.measured_hash then return end
+    local no_side = m and not m.side and self.align ~= "center"
+    if doc:getDocumentRenderingHash(false) == self.measured_hash and not no_side then return end
 
     -- If the book can't be measured, the user's margins are used as they are.
     self.measurement, self.error = Measure.sample(doc, Screen:getWidth(), Screen:getHeight())
@@ -286,9 +305,7 @@ function AutoMargin:addToMainMenu(menu_items)
                     local text = T(_("Shift: %1"), self.shift > 0 and "+" .. self.shift or self.shift)
                     return self.shift == defaultShift() and text .. "   ★" or text
                 end,
-                help_text = _(
-                    "Moves the centered text down, or up with a negative value, in the same units as the margins."
-                ),
+                help_text = _("Moves the text down, or up with a negative value, in the same units as the margins."),
                 keep_menu_open = true,
                 callback = function(touchmenu_instance)
                     self:showShiftDialog(touchmenu_instance)
@@ -296,6 +313,19 @@ function AutoMargin:addToMainMenu(menu_items)
                 hold_callback = function(touchmenu_instance)
                     self:showShiftDialog(touchmenu_instance, true)
                 end,
+            },
+            {
+                text_func = function()
+                    return T(_("Alignment: %1"), ALIGNMENTS[self.align])
+                end,
+                help_text = _(
+                    "Centers the text, or aligns it to the top or bottom of the page with the gap there matching the gap at the sides."
+                ),
+                sub_item_table = {
+                    self:alignItem("top"),
+                    self:alignItem("center"),
+                    self:alignItem("bottom"),
+                },
                 separator = true,
             },
             {
@@ -337,7 +367,7 @@ function AutoMargin:addToMainMenu(menu_items)
                     {
                         text = _("Show guide lines"),
                         help_text = _(
-                            "Black lines: just outside the text block on a full page of text, above the first line's top edge and below the last line's bottom edge. The gap from the top of the screen to the top one should equal the gap from the bottom one to the bottom of the screen.\n\nGray lines: the text area, inside the margins."
+                            "Black lines: just outside the text block on a full page of text, above the first line's top edge and below the last line's bottom edge. The gap from the top of the screen to the top one should equal the gap from the bottom one to the bottom of the screen. Aligned to the top or bottom, the gap on that side should equal the gap at the sides instead.\n\nGray lines: the text area, inside the margins."
                         ),
                         checked_func = function()
                             return G_reader_settings:isTrue(GUIDES)
@@ -372,6 +402,28 @@ function AutoMargin:edgeItem(text, setting, value)
         callback = function()
             G_reader_settings:saveSetting(setting, value)
             self:reapply()
+        end,
+    }
+end
+
+-- An alignment for this book; long-press makes it the default (★) for newly
+-- opened books.
+function AutoMargin:alignItem(align)
+    return {
+        text_func = function()
+            return align == defaultAlign() and ALIGNMENTS[align] .. "   ★" or ALIGNMENTS[align]
+        end,
+        radio = true,
+        checked_func = function()
+            return self.align == align
+        end,
+        callback = function()
+            self.align = align
+            self:reapply()
+        end,
+        hold_callback = function(touchmenu_instance)
+            G_reader_settings:saveSetting(ALIGN, align)
+            touchmenu_instance:updateItems()
         end,
     }
 end
@@ -444,8 +496,12 @@ function AutoMargin:describe()
         T(_("Gap below: %1 → %2 px"), l.before.bottom, l.after.bottom),
         T(_("Measured in %1 ms"), math.floor(m.ms + 0.5)),
     }
+    if m.side then table.insert(lines, 4, T(_("Gap at the sides: %1 px"), m.side)) end
     if l.clamped then
-        table.insert(lines, _("The status bar limits how far the text can move, so it's only partly centered."))
+        table.insert(
+            lines,
+            _("The status bar or the edge of the screen limits how far the text can move, so it's only partly aligned.")
+        )
     end
     if m.spaced then
         table.insert(
