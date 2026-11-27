@@ -256,13 +256,17 @@ function AutoMargin:onChangeViewMode()
     self:reapply()
 end
 
-function AutoMargin:onToggleAutoMargin()
+-- enabled: true or false to turn it on or off, nil to flip it.
+function AutoMargin:onToggleAutoMargin(enabled)
     if not self.ui.rolling then return end
-    self.enabled = not self.enabled
-    -- Measure the page as it is now, so that after layout changes made while
-    -- it was off, fitting takes a single render.
-    if self.enabled then self:remeasure() end
-    self:reapply()
+    if enabled == nil then enabled = not self.enabled end
+    if enabled ~= self.enabled then
+        self.enabled = enabled
+        -- Measure the page as it is now, so that after layout changes made
+        -- while it was off, fitting takes a single render.
+        if enabled then self:remeasure() end
+        self:reapply()
+    end
     -- Why is in Debug › Show measurements.
     Notification:notify(
         not self.enabled and _("AutoMargin off")
@@ -277,6 +281,20 @@ function AutoMargin:onDispatcherRegisterActions()
         category = "none",
         event = "ToggleAutoMargin",
         title = _("Toggle AutoMargin"),
+        rolling = true,
+    })
+    Dispatcher:registerAction("automargin_enable", {
+        category = "none",
+        event = "ToggleAutoMargin",
+        arg = true,
+        title = _("Enable AutoMargin"),
+        rolling = true,
+    })
+    Dispatcher:registerAction("automargin_disable", {
+        category = "none",
+        event = "ToggleAutoMargin",
+        arg = false,
+        title = _("Disable AutoMargin"),
         rolling = true,
     })
 end

@@ -24,6 +24,17 @@ test("turning it back on measures and fits in a single render", function()
     H.checkAligned(reader, "turned back on")
 end)
 
+test("Enable and Disable set the state instead of flipping it", function()
+    H.send(reader, "ToggleAutoMargin", false)
+    eq(false, reader.automargin:isEnabled(), "after Disable")
+    H.resetCounts()
+    H.send(reader, "ToggleAutoMargin", false)
+    eq(false, reader.automargin:isEnabled(), "after Disable again")
+    eq(0, H.count.rerenders, "re-renders")
+    H.send(reader, "ToggleAutoMargin", true)
+    eq(true, reader.automargin:isEnabled(), "after Enable")
+end)
+
 test("turning it on says when the book can't be measured", function()
     local Notification = require("ui/widget/notification")
     local notify, said = Notification.notify, nil
